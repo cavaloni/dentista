@@ -11,14 +11,14 @@ import { Database } from "@/lib/supabase/types";
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: practice } = await supabase
     .from("practices")

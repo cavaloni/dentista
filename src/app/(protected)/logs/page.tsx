@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { ensurePracticeForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { Database } from "@/lib/supabase/types";
 
 function truncate(text: string, max = 80) {
   if (text.length <= max) return text;
@@ -12,14 +11,14 @@ function truncate(text: string, max = 80) {
 export default async function LogsPage() {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: messages } = await supabase
     .from("messages")

@@ -6,6 +6,7 @@ import {
   type PracticeContextValue,
 } from "@/components/practice-context";
 import { NavLinks } from "@/components/nav-links";
+import { NotificationWrapper } from "@/components/notifications/notification-wrapper";
 import { ensurePracticeForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Database } from "@/lib/supabase/types";
@@ -24,14 +25,14 @@ export default async function ProtectedLayout({
 }) {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: practice, error } = await supabase
     .from("practices")
@@ -59,29 +60,31 @@ export default async function ProtectedLayout({
 
   return (
     <PracticeProvider value={practiceContext}>
-      <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="w-full border-b border-slate-800/70 bg-slate-950/70 px-6 py-6 backdrop-blur md:w-72 md:border-r md:border-b-0">
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-lg font-semibold text-slate-100">
-                {typedPractice.name}
-              </h1>
-              <p className="text-xs uppercase tracking-wide text-cyan-300/80">
-                Gap Filler Console
-              </p>
+      <NotificationWrapper>
+        <div className="flex min-h-screen flex-col md:flex-row">
+          <aside className="w-full border-b border-slate-800/70 bg-slate-950/70 px-6 py-6 backdrop-blur md:w-72 md:border-r md:border-b-0">
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-lg font-semibold text-slate-100">
+                  {typedPractice.name}
+                </h1>
+                <p className="text-xs uppercase tracking-wide text-cyan-300/80">
+                  Gap Filler Console
+                </p>
+              </div>
+              <NavLinks items={navItems} />
+              <div className="pt-6">
+                <LogoutButton />
+              </div>
             </div>
-            <NavLinks items={navItems} />
-            <div className="pt-6">
-              <LogoutButton />
+          </aside>
+          <main className="flex-1 px-6 py-10">
+            <div className="mx-auto w-full max-w-6xl space-y-8">
+              {children}
             </div>
-          </div>
-        </aside>
-        <main className="flex-1 px-6 py-10">
-          <div className="mx-auto w-full max-w-6xl space-y-8">
-            {children}
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      </NotificationWrapper>
     </PracticeProvider>
   );
 }

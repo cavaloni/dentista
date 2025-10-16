@@ -44,15 +44,15 @@ export async function releaseSlotAction(
 
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
   const service = createSupabaseServiceClient();
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: practice, error: practiceError } = await service
     .from("practices")
@@ -79,7 +79,7 @@ export async function releaseSlotAction(
     _notes: parsed.data.notes ?? null,
     _claim_window_minutes: practice.claim_window_minutes,
     _wave_size: practice.recipients_per_wave,
-    _released_by: session.user.id,
+    _released_by: user.id,
     _timezone: practice.timezone,
   });
 
@@ -187,15 +187,15 @@ export async function resendNextWaveAction(
 
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
   const service = createSupabaseServiceClient();
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: practice, error: practiceError } = await service
     .from("practices")

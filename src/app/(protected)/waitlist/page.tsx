@@ -5,7 +5,6 @@ import { AddMemberForm } from "@/components/waitlist/add-member-form";
 import { MemberRow } from "@/components/waitlist/member-row";
 import { ensurePracticeForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { Database } from "@/lib/supabase/types";
 
 type SearchParams = {
   page?: string;
@@ -21,14 +20,14 @@ export default async function WaitlistPage({
   const resolvedSearchParams = await searchParams;
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
   const page = Math.max(
     1,
     Number.parseInt(resolvedSearchParams?.page ?? "1", 10)

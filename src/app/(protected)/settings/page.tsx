@@ -1,20 +1,21 @@
 import { redirect } from "next/navigation";
 
 import { PracticeSettingsForm } from "@/components/settings/practice-settings-form";
+import { NotificationSettings } from "@/components/notifications/notification-settings";
 import { ensurePracticeForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(session.user.id);
+  const practiceId = await ensurePracticeForUser(user.id);
 
   const { data: practice } = await supabase
     .from("practices")
@@ -41,6 +42,8 @@ export default async function SettingsPage() {
         </div>
         <PracticeSettingsForm settings={practice} />
       </section>
+
+      <NotificationSettings />
     </div>
   );
 }
