@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
 import {
   settingsInitialState,
@@ -36,7 +37,7 @@ export function PracticeSettingsForm({
 }: {
   settings: PracticeSettings;
 }) {
-  const [state, formAction] = useFormState<SettingsState, FormData>(
+  const [state, formAction] = useActionState<SettingsState, FormData>(
     updateSettingsAction,
     settingsInitialState
   );

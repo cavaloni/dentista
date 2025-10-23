@@ -29,11 +29,11 @@ export async function processInboundMessage(payload: InboundPayload) {
 
   const { data: member } = await supabase
     .from("waitlist_members")
-    .select("id, practice_id, full_name, channel, address")
+    .select("id, company_id, full_name, channel, address")
     .eq("address", normalizedAddress)
     .maybeSingle();
 
-  if (!member || !member.practice_id) {
+  if (!member || !member.company_id) {
     console.log("[processInboundMessage] Member not found for address:", normalizedAddress);
     return null;
   }
@@ -41,13 +41,13 @@ export async function processInboundMessage(payload: InboundPayload) {
   console.log("[processInboundMessage] Found member:", {
     id: member.id,
     name: member.full_name,
-    practiceId: member.practice_id,
+    companyId: member.company_id,
   });
 
-  const practiceId = member.practice_id;
+  const companyId = member.company_id;
 
   await recordInboundMessage({
-    practiceId,
+    practiceId: companyId,
     waitlistMemberId: member.id,
     channel: payload.channel,
     body: payload.body,
@@ -63,88 +63,90 @@ export async function processInboundMessage(payload: InboundPayload) {
   const { data: claim } = await supabase
     .from("claims")
     .select(
-      "id, status, slot_id, wave_number, slot:slots(id, status, start_at, duration_minutes, claim_window_minutes, practice_id, expires_at, notes), waitlist_members(full_name)"
+      "id, status, slot_id, wave_number, slot:slots(id, status, start_at, duration_minutes, claim_window_minutes, company_id, expires_at, notes), waitlist_members(full_name)"
     )
-    .eq("practice_id", practiceId)
+    .eq("company_id", companyId)
     .eq("waitlist_member_id", member.id)
     .in("status", ["pending", "won"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const slot = claim?.slot as any;
   console.log("[processInboundMessage] Found claim:", claim ? {
     id: claim.id,
     status: claim.status,
-    slotStatus: claim.slot?.status,
+    slotStatus: slot?.status,
   } : "none");
 
-  if (!claim || !claim.slot) {
+  if (!claim || !slot) {
     console.log("[processInboundMessage] No active claim found for member");
-    return practiceId;
+    return companyId;
   }
 
-  const { data: practice } = await supabase
-    .from("practices")
+  const { data: company } = await supabase
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, invite_template, confirmation_template, taken_template"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (!practice) {
-    return practiceId;
+  if (!company) {
+    return companyId;
   }
 
   const slotStartLabel = formatInTimeZone(
-    claim.slot.start_at,
-    practice.timezone,
+    slot.start_at,
+    company.timezone,
     "EEE d MMM • HH:mm"
   );
 
   const inviteContext = {
-    practiceName: practice.name,
+    practiceName: company.name,
     patientName: member.full_name,
     slotStart: slotStartLabel,
-    duration: `${claim.slot.duration_minutes}`,
-    claimWindow: `${practice.claim_window_minutes}`,
+    duration: `${slot.duration_minutes}`,
+    claimWindow: `${company.claim_window_minutes}`,
   };
 
   if (!isAffirmative) {
     console.log("[processInboundMessage] Not an affirmative response, ignoring");
-    return practiceId;
+    return companyId;
   }
 
   console.log("[processInboundMessage] Affirmative response received, attempting claim...");
 
   const now = Date.now();
-  const expired = new Date(claim.slot.expires_at).getTime() < now;
+  const expired = new Date(slot.expires_at).getTime() < now;
 
   console.log("[processInboundMessage] Slot check:", {
     expired,
-    slotStatus: claim.slot.status,
-    expiresAt: claim.slot.expires_at,
+    slotStatus: slot.status,
+    expiresAt: slot.expires_at,
   });
 
-  if (expired || claim.slot.status !== "open") {
+  if (expired || slot.status !== "open") {
     console.log("[processInboundMessage] Slot expired or not open, sending taken message");
     await queueOutboundMessage({
-      practiceId,
-      slotId: claim.slot.id,
+      practiceId: companyId,
+      slotId: slot.id,
       claimId: claim.id,
       waitlistMemberId: member.id,
       channel: member.channel,
       templateKey: "slot_taken",
-      body: buildTakenMessage(practice.taken_template, inviteContext),
+      body: buildTakenMessage(company.taken_template, inviteContext),
       to: normalizedAddress,
       idempotencyKey: `taken:${claim.id}`,
       metadata: { reason: "late" },
     });
-    return practiceId;
+    return companyId;
   }
 
   const { data: results, error: claimError } = await supabase.rpc("attempt_claim", {
-    _practice_id: practiceId,
-    _slot_id: claim.slot.id,
+    _company_id: companyId,
+    _slot_id: slot.id,
     _claim_id: claim.id,
     _response: payload.body,
   });
@@ -156,73 +158,47 @@ export async function processInboundMessage(payload: InboundPayload) {
   console.log("[processInboundMessage] Claim outcome:", won ? "WON" : "LOST");
 
   if (won) {
-    console.log("[processInboundMessage] Sending confirmation message");
-    await queueOutboundMessage({
-      practiceId,
-      slotId: claim.slot.id,
-      claimId: claim.id,
-      waitlistMemberId: member.id,
-      channel: member.channel,
-      templateKey: "slot_confirmed",
-      body: buildConfirmationMessage(
-        practice.confirmation_template,
-        inviteContext
-      ),
-      to: normalizedAddress,
-      idempotencyKey: `confirm:${claim.id}`,
-      metadata: { claim_status: "won" },
-    });
-
+    console.log("[processInboundMessage] Claim won! Waiting for user confirmation in modal...");
+    
+    // Update slot status to 'claimed' (not 'booked' yet - waiting for user confirmation)
     await supabase
       .from("slots")
-      .update({ status: "booked" })
-      .eq("id", claim.slot.id);
+      .update({ status: "claimed" })
+      .eq("id", slot.id);
 
-    const { data: others } = await supabase
-      .from("claims")
-      .select("id, waitlist_member_id, waitlist_members(channel, address, full_name)")
-      .eq("slot_id", claim.slot.id)
-      .neq("id", claim.id);
+    // Insert notification for real-time updates
+    // This table has NO RLS, so the insert will trigger Realtime broadcasts
+    // The frontend modal will appear, and user must click "Confirm Booking"
+    const { error: notificationError } = await supabase
+      .from("booking_notifications")
+      .insert({
+        company_id: companyId,
+        claim_id: claim.id,
+      });
 
-    if (others) {
-      await Promise.all(
-        others.map(async (other) => {
-          if (!other.waitlist_members) return;
-          await queueOutboundMessage({
-            practiceId,
-            slotId: claim.slot.id,
-            claimId: other.id,
-            waitlistMemberId: other.waitlist_member_id,
-            channel: other.waitlist_members.channel,
-            templateKey: "slot_taken",
-            body: buildTakenMessage(practice.taken_template, {
-              ...inviteContext,
-              patientName: other.waitlist_members.full_name,
-            }),
-            to: normalizeAddress(
-              other.waitlist_members.channel,
-              other.waitlist_members.address
-            ),
-            idempotencyKey: `taken:${other.id}`,
-            metadata: { reason: "winner_selected" },
-          });
-        })
-      );
+    if (notificationError) {
+      console.error("[processInboundMessage] Failed to insert booking notification:", notificationError);
+    } else {
+      console.log("[processInboundMessage] Booking notification inserted successfully");
+      console.log("[processInboundMessage] User must confirm booking in modal before messages are sent");
     }
+
+    // NOTE: Confirmation message and "taken" messages are now sent via
+    // the /api/bookings/confirm endpoint when user clicks "Confirm Booking"
   } else {
     await queueOutboundMessage({
-      practiceId,
-      slotId: claim.slot.id,
+      practiceId: companyId,
+      slotId: slot.id,
       claimId: claim.id,
       waitlistMemberId: member.id,
       channel: member.channel,
       templateKey: "slot_taken",
-      body: buildTakenMessage(practice.taken_template, inviteContext),
+      body: buildTakenMessage(company.taken_template, inviteContext),
       to: normalizedAddress,
       idempotencyKey: `taken:${claim.id}`,
       metadata: { reason: "already_claimed" },
     });
   }
 
-  return practiceId;
+  return companyId;
 }

@@ -25,3 +25,32 @@ body {
   font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
 }
+
+/* cmdk styles */
+[cmdk-root] {
+  max-width: 640px;
+  width: 100%;
+}
+
+[cmdk-input] {
+  outline: none;
+  border: none;
+}
+
+[cmdk-group-heading] {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(148, 163, 184);
+  padding: 8px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+[cmdk-item] {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+[cmdk-item][aria-selected="true"] {
+  background: rgb(30, 41, 59);
+}

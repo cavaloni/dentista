@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect, useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { releaseSlotAction } from "@/app/(protected)/dashboard/actions";
 import {
@@ -38,7 +38,7 @@ export function ReleaseSlotForm({
   recipientsPerWave,
   claimWindowMinutes,
 }: ReleaseSlotFormProps) {
-  const [state, formAction] = useFormState<ReleaseSlotState, FormData>(
+  const [state, formAction] = useActionState<ReleaseSlotState, FormData>(
     releaseSlotAction,
     releaseSlotInitialState
   );

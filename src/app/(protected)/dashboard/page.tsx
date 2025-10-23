@@ -4,7 +4,8 @@ import { formatInTimeZone } from "date-fns-tz";
 import { Countdown } from "@/components/dashboard/countdown";
 import { ReleaseSlotForm } from "@/components/dashboard/release-slot-form";
 import { ResendButton } from "@/components/dashboard/resend-button";
-import { ensurePracticeForUser } from "@/lib/practice";
+import { CancelButton } from "@/components/dashboard/cancel-button";
+import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Database } from "@/lib/supabase/types";
 
@@ -18,26 +19,26 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
-  const { data: practice } = await supabase
-    .from("practices")
+  const { data: company } = await supabase
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, recipients_per_wave, default_duration_minutes"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (!practice) {
-    throw new Error("Practice not found");
+  if (!company) {
+    throw new Error("Company not found");
   }
 
   // Type assertion to help TypeScript understand the type
-  const typedPractice = practice as Database["public"]["Tables"]["practices"]["Row"];
+  const typedCompany = company as Database["public"]["Tables"]["companies"]["Row"];
 
   const defaultStart = formatInTimeZone(
     Date.now() + 30 * 60 * 1000,
-    typedPractice.timezone,
+    typedCompany.timezone,
     "yyyy-MM-dd'T'HH:mm"
   );
 
@@ -46,7 +47,7 @@ export default async function DashboardPage() {
     .select(
       "id, start_at, duration_minutes, notes, status, expires_at, wave_number, claim_window_minutes, claims(id, status, wave_number, waitlist_members(full_name, channel))"
     )
-    .eq("practice_id", typedPractice.id)
+    .eq("company_id", typedCompany.id)
     .in("status", ["open", "claimed", "expired"])
     .order("expires_at", { ascending: true })
     .limit(10);
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
     .select(
       "id, created_at, direction, status, channel, body, waitlist_members(full_name), slot:slots(start_at), claim:claims(status, wave_number)"
     )
-    .eq("practice_id", typedPractice.id)
+    .eq("company_id", typedCompany.id)
     .order("created_at", { ascending: false })
     .limit(12);
 
@@ -66,7 +67,7 @@ export default async function DashboardPage() {
     start_at: string;
     duration_minutes: number;
     notes: string | null;
-    status: "open" | "claimed" | "booked" | "expired";
+    status: "open" | "claimed" | "booked" | "expired" | "cancelled";
     expires_at: string;
     wave_number: number;
     claim_window_minutes: number;
@@ -106,11 +107,11 @@ export default async function DashboardPage() {
           </div>
         </div>
         <ReleaseSlotForm
-          timezone={typedPractice.timezone}
-          defaultDuration={typedPractice.default_duration_minutes}
+          timezone={typedCompany.timezone}
+          defaultDuration={typedCompany.default_duration_minutes}
           defaultStart={defaultStart}
-          recipientsPerWave={typedPractice.recipients_per_wave}
-          claimWindowMinutes={typedPractice.claim_window_minutes}
+          recipientsPerWave={typedCompany.recipients_per_wave}
+          claimWindowMinutes={typedCompany.claim_window_minutes}
         />
       </section>
 
@@ -118,7 +119,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-100">Active broadcasts</h2>
           <span className="text-xs uppercase tracking-wide text-slate-500">
-            Claim window: {typedPractice.claim_window_minutes} min
+            Claim window: {typedCompany.claim_window_minutes} min
           </span>
         </div>
         {typedActiveSlots && typedActiveSlots.length > 0 ? (
@@ -142,7 +143,7 @@ export default async function DashboardPage() {
                       <p className="text-sm font-medium text-cyan-200">
                         {formatInTimeZone(
                           slot.start_at,
-                          typedPractice.timezone,
+                          typedCompany.timezone,
                           "EEE d MMM yyyy • HH:mm"
                         )}
                       </p>
@@ -168,11 +169,16 @@ export default async function DashboardPage() {
                       {slot.notes}
                     </p>
                   )}
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                    <span>
+                  <div className="mt-4 flex flex-col gap-3 text-xs text-slate-400 sm:flex-row sm:items-start sm:justify-between">
+                    <span className="sm:pt-1">
                       {recipientCount} notified · {pending ?? 0} waiting
                     </span>
-                    {slot.status === "open" && <ResendButton slotId={slot.id} />}
+                    {slot.status === "open" && (
+                      <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <ResendButton slotId={slot.id} />
+                        <CancelButton slotId={slot.id} />
+                      </div>
+                    )}
                   </div>
                   {claimed && (
                     <p className="mt-3 text-sm text-emerald-300">
@@ -214,7 +220,7 @@ export default async function DashboardPage() {
                   <td className="px-4 py-3 text-xs text-slate-400">
                     {formatInTimeZone(
                       message.created_at,
-                      typedPractice.timezone,
+                      typedCompany.timezone,
                       "d MMM • HH:mm"
                     )}
                   </td>

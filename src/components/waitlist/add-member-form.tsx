@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { useEffect, useRef } from "react";
 
 import {
@@ -8,6 +9,9 @@ import {
   initialWaitlistState,
   type WaitlistActionState,
 } from "@/app/(protected)/waitlist/actions";
+import {
+  useWaitlistStore,
+} from "@/stores/waitlist";
 
 const channels = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -28,18 +32,26 @@ function SubmitButton() {
   );
 }
 
+// Stable selector functions defined outside component to prevent re-creation
+const selectAddMember = (state: ReturnType<typeof useWaitlistStore.getState>) => state.addMember;
+const selectMarkNeedsSync = (state: ReturnType<typeof useWaitlistStore.getState>) => state.markNeedsSync;
+
 export function AddMemberForm() {
-  const [state, formAction] = useFormState<WaitlistActionState, FormData>(
+  const [state, formAction] = useActionState<WaitlistActionState, FormData>(
     createMemberAction,
     initialWaitlistState()
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const addMemberToStore = useWaitlistStore(selectAddMember);
+  const markNeedsSync = useWaitlistStore(selectMarkNeedsSync);
 
   useEffect(() => {
-    if (state.status === "success") {
+    if (state.status === "success" && "member" in state && state.member) {
+      addMemberToStore(state.member);
+      markNeedsSync();
       formRef.current?.reset();
     }
-  }, [state.status]);
+  }, [state, addMemberToStore, markNeedsSync]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">

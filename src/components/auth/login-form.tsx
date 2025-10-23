@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { requestMagicLink, type MagicLinkState } from "@/app/(auth)/login/actions";
 
@@ -21,7 +22,7 @@ function SubmitButton() {
 }
 
 export function LoginForm() {
-  const [state, formAction] = useFormState(requestMagicLink, initialState);
+  const [state, formAction] = useActionState(requestMagicLink, initialState);
 
   return (
     <form action={formAction} className="space-y-6">

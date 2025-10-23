@@ -20,7 +20,7 @@ const memberSchema = z.object({
 
 export type WaitlistActionState =
   | { status: "idle" }
-  | { status: "success"; message: string }
+  | { status: "success"; message: string; member?: WaitlistMember }
   | { status: "error"; message: string };
 
 const initialState: WaitlistActionState = { status: "idle" };
@@ -39,10 +39,10 @@ async function getContext() {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensurePracticeForUser(user.id);
   const service = createSupabaseServiceClient();
 
-  return { supabase, service, practiceId } as const;
+  return { supabase, service, companyId } as const;
 }
 
 export async function createMemberAction(
@@ -61,31 +61,42 @@ export async function createMemberAction(
     return { status: "error", message: "Please check the form fields." };
   }
 
-  const { service, practiceId } = await getContext();
+  const { service, companyId } = await getContext();
 
   const normalizedAddress = normalizeAddress(
     parsed.data.channel,
     parsed.data.address
   );
 
-  const { error } = await service.from("waitlist_members").insert({
-    practice_id: practiceId,
-    full_name: parsed.data.full_name,
-    channel: parsed.data.channel,
-    address: normalizedAddress,
-    priority: parsed.data.priority,
-    notes: parsed.data.notes ?? null,
-  });
+  const { data, error } = await service
+    .from("waitlist_members")
+    .insert({
+      company_id: companyId,
+      full_name: parsed.data.full_name,
+      channel: parsed.data.channel,
+      address: normalizedAddress,
+      priority: parsed.data.priority,
+      notes: parsed.data.notes ?? null,
+    })
+    .select(
+      "id, full_name, channel, address, priority, active, notes, last_notified_at"
+    )
+    .single();
 
-  if (error) {
+  if (error || !data) {
+    console.error("[createMemberAction] Database error:", error);
     return {
       status: "error",
-      message: "Unable to add member right now.",
+      message: `Unable to add member: ${error?.message ?? "Unknown error"}`,
     };
   }
 
   revalidatePath("/waitlist");
-  return { status: "success", message: "Member added." };
+  return {
+    status: "success",
+    message: "Member added.",
+    member: data as WaitlistMember,
+  };
 }
 
 export async function updateMemberAction(
@@ -105,14 +116,14 @@ export async function updateMemberAction(
     return { status: "error", message: "Invalid member payload." };
   }
 
-  const { service, practiceId } = await getContext();
+  const { service, companyId } = await getContext();
 
   const normalizedAddress = normalizeAddress(
     parsed.data.channel,
     parsed.data.address
   );
 
-  const { error } = await service
+  const { data, error } = await service
     .from("waitlist_members")
     .update({
       full_name: parsed.data.full_name,
@@ -122,52 +133,103 @@ export async function updateMemberAction(
       notes: parsed.data.notes ?? null,
     })
     .eq("id", parsed.data.id)
-    .eq("practice_id", practiceId);
+    .eq("company_id", companyId)
+    .select(
+      "id, full_name, channel, address, priority, active, notes, last_notified_at"
+    )
+    .single();
 
-  if (error) {
+  if (error || !data) {
+    console.error("[updateMemberAction] Database error:", error);
     return {
       status: "error",
-      message: "Update failed.",
+      message: `Update failed: ${error?.message ?? "Unknown error"}`,
     };
   }
 
   revalidatePath("/waitlist");
-  return { status: "success", message: "Member updated." };
+  return {
+    status: "success",
+    message: "Member updated.",
+    member: data as WaitlistMember,
+  };
 }
 
 export async function toggleMemberAction(formData: FormData) {
-  const { service, practiceId } = await getContext();
+  const { service, companyId } = await getContext();
   const id = formData.get("id");
   const active = formData.get("active");
 
   if (!id || typeof id !== "string") {
-    return;
+    return null;
   }
 
-  await service
+  const { data, error } = await service
     .from("waitlist_members")
     .update({ active: active === "true" })
     .eq("id", id)
-    .eq("practice_id", practiceId);
+    .eq("company_id", companyId)
+    .select(
+      "id, full_name, channel, address, priority, active, notes, last_notified_at"
+    )
+    .single();
+
+  if (error || !data) {
+    console.error("[toggleMemberAction] Database error:", error);
+    return null;
+  }
 
   revalidatePath("/waitlist");
+  return data as WaitlistMember;
 }
 
 export async function deleteMemberAction(formData: FormData) {
-  const { service, practiceId } = await getContext();
+  const { service, companyId } = await getContext();
   const id = formData.get("id");
 
   if (!id || typeof id !== "string") {
-    return;
+    return { success: false };
   }
 
-  await service
+  const { error } = await service
     .from("waitlist_members")
     .delete()
     .eq("id", id)
-    .eq("practice_id", practiceId);
+    .eq("company_id", companyId);
+
+  if (error) {
+    console.error("[deleteMemberAction] Database error:", error);
+    return { success: false };
+  }
 
   revalidatePath("/waitlist");
+  return { success: true, id };
+}
+
+export type WaitlistMember = {
+  id: string;
+  full_name: string;
+  channel: "whatsapp" | "sms" | "email";
+  address: string;
+  priority: number;
+  active: boolean;
+  notes: string | null;
+  last_notified_at: string | null;
+};
+
+export async function getAllMembersAction(): Promise<WaitlistMember[]> {
+  const { supabase, companyId } = await getContext();
+
+  const { data: members } = await supabase
+    .from("waitlist_members")
+    .select(
+      "id, full_name, channel, address, priority, active, notes, last_notified_at"
+    )
+    .eq("company_id", companyId)
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  return (members as WaitlistMember[]) || [];
 }
 
 export { initial as initialWaitlistState };

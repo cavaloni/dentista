@@ -3,153 +3,161 @@
 import { useEffect } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-
-export function useBookingListener(practiceId: string) {
+/**
+ * Secure Real-time Booking Notification Listener
+ * 
+ * Uses a "notification queue" pattern for multi-tenant security:
+ * 1. Subscribes to booking_notifications table (NO RLS - enables Realtime)
+ * 2. Receives notification with only reference IDs (company_id, claim_id)
+ * 3. Queries RLS-protected tables to fetch actual booking data
+ * 4. RLS ensures users only see their own company's data
+ * 
+ * Security Model:
+ * - Notification table has no RLS → Realtime broadcasts work
+ * - Notification contains only IDs, no sensitive data
+ * - Actual queries are RLS-protected
+ * - Malicious users can't query other companies' data
+ */
+export function useBookingListener(companyId: string) {
   useEffect(() => {
-    if (!practiceId) return;
+    if (!companyId) return;
 
     const supabase = createSupabaseBrowserClient();
 
-    // Track notified events to prevent duplicates
-    const notifiedEvents = new Set<string>();
+    // Track notified claim IDs to prevent duplicates
+    const notifiedClaims = new Set<string>();
 
-    // Listen for changes on the slots table
-    const slotsSubscription = supabase
-      .channel(`slots-${practiceId}`)
+    console.log("[useBookingListener] Setting up notification subscription for company:", companyId);
+
+    // Subscribe to booking_notifications table
+    // This works because the table has NO RLS, allowing service role updates to broadcast
+    const notificationSubscription = supabase
+      .channel(`booking-notifications-${companyId}`)
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "INSERT",
           schema: "public",
-          table: "slots",
-          filter: `practice_id=eq.${practiceId}`,
+          table: "booking_notifications",
+          filter: `company_id=eq.${companyId}`,
         },
         async (payload) => {
-          const newStatus = payload.new.status;
-          const oldStatus = payload.old.status;
-          const eventKey = `${payload.new.id}-${newStatus}`;
-
-          // Trigger when slot status changes to either 'claimed' or 'booked'
-          // 'claimed' happens when database function runs (real booking acceptance)
-          // 'booked' happens when inbound message processing completes
-          if (
-            (newStatus === "claimed" && oldStatus !== "claimed") ||
-            (newStatus === "booked" && oldStatus !== "booked")
-          ) {
-            // Prevent duplicate notifications
-            if (notifiedEvents.has(eventKey)) {
-              return;
-            }
-            notifiedEvents.add(eventKey);
-
-            console.log("Booking accepted event (slots table):", {
-              slotId: payload.new.id,
-              status: newStatus,
-              oldStatus: oldStatus,
-              claimedClaimId: payload.new.claimed_claim_id,
-            });
-
-            await handleBookingNotification(payload.new.id, newStatus, payload.new.claimed_claim_id);
+          const claimId = payload.new.claim_id as string;
+          
+          // Prevent duplicate notifications
+          if (notifiedClaims.has(claimId)) {
+            console.log("[useBookingListener] Duplicate notification ignored:", claimId);
+            return;
           }
+          notifiedClaims.add(claimId);
+
+          console.log("[useBookingListener] Booking notification received:", {
+            claimId,
+            companyId: payload.new.company_id,
+            createdAt: payload.new.created_at,
+          });
+
+          await handleBookingNotification(claimId);
         }
       )
-      .subscribe();
-
-    // Also listen for claim status changes as a fallback
-    const claimsSubscription = supabase
-      .channel(`claims-${practiceId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "claims",
-          filter: `practice_id=eq.${practiceId}`,
-        },
-        async (payload) => {
-          const newStatus = payload.new.status;
-          const oldStatus = payload.old.status;
-          const eventKey = `${payload.new.slot_id}-${payload.new.id}`;
-
-          // Trigger when claim status changes to 'won'
-          if (newStatus === "won" && oldStatus !== "won") {
-            // Prevent duplicate notifications
-            if (notifiedEvents.has(eventKey)) {
-              return;
-            }
-            notifiedEvents.add(eventKey);
-
-            console.log("Booking accepted event (claims table):", {
-              claimId: payload.new.id,
-              slotId: payload.new.slot_id,
-              status: newStatus,
-              oldStatus: oldStatus,
-            });
-
-            await handleBookingNotification(payload.new.slot_id, "won", payload.new.id);
-          }
+      .subscribe((status, error) => {
+        if (error) {
+          console.error("[useBookingListener] Subscription error:", error);
+        } else {
+          console.log("[useBookingListener] Subscription status:", status);
         }
-      )
-      .subscribe();
+      });
 
-    // Helper function to handle booking notification logic
-    async function handleBookingNotification(slotId: string, source: string, claimId?: string) {
+    // Query booking details using RLS-protected tables
+    async function handleBookingNotification(claimId: string) {
       try {
-        // Get the claim details to find the patient information
-        const claimQuery = supabase
+        console.log("[useBookingListener] Fetching booking details for claim:", claimId);
+
+        // This query is RLS-protected - user can only query their own company's data
+        const { data: claim, error } = await supabase
           .from("claims")
           .select(`
-            *,
-            waitlist_members(full_name),
-            slots(
+            id,
+            slot_id,
+            status,
+            company_id,
+            waitlist_members!waitlist_member_id(
+              full_name
+            ),
+            slots!slot_id(
               start_at,
               duration_minutes,
-              practices(name, timezone)
+              company_id
             )
           `)
-          .eq("slot_id", slotId);
+          .eq("id", claimId)
+          .single();
 
-        // Use the claim ID if we have it, otherwise find the 'won' claim
-        if (claimId) {
-          claimQuery.eq("id", claimId);
-        } else {
-          claimQuery.eq("status", "won");
+        // Fetch company details separately to avoid relationship issues
+        let companyName = "Practice";
+        if (claim && claim.company_id) {
+          const { data: company } = await supabase
+            .from("companies")
+            .select("name")
+            .eq("id", claim.company_id)
+            .single();
+          
+          if (company) {
+            companyName = company.name;
+          }
         }
 
-        const { data: claim } = await claimQuery.single();
+        if (error) {
+          console.error("[useBookingListener] Error fetching claim details:", error);
+          return;
+        }
 
-        if (claim && claim.waitlist_members && claim.slots && claim.slots.practices) {
-          const bookingData = {
-            id: claim.id,
-            patientName: claim.waitlist_members.full_name,
-            slotStart: new Date(claim.slots.start_at).toLocaleString(),
-            duration: claim.slots.duration_minutes.toString(),
-            practiceName: claim.slots.practices.name,
-            slotId: claim.slot_id,
-          };
+        if (!claim) {
+          console.warn("[useBookingListener] Claim not found (RLS may have blocked access):", claimId);
+          return;
+        }
 
-          console.log("Dispatching booking-accepted event:", bookingData);
-
-          // Dispatch custom event for the notification context to handle
-          window.dispatchEvent(
-            new CustomEvent("booking-accepted", { detail: bookingData })
-          );
-        } else {
-          console.warn("Could not find complete booking details:", {
+        // Validate we have all required data
+        if (
+          !claim.waitlist_members ||
+          !claim.slots
+        ) {
+          console.warn("[useBookingListener] Incomplete booking data:", {
             claim,
-            hasWaitlistMember: !!claim?.waitlist_members,
-            hasSlot: !!claim?.slots,
-            hasPractice: !!claim?.slots?.practices,
+            hasWaitlistMember: !!claim.waitlist_members,
+            hasSlot: !!claim.slots,
           });
+          return;
         }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const member = claim.waitlist_members as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const slot = claim.slots as any;
+
+        const bookingData = {
+          id: claim.id,
+          patientName: member.full_name,
+          slotStart: new Date(slot.start_at).toLocaleString(),
+          duration: slot.duration_minutes.toString(),
+          practiceName: companyName,
+          slotId: claim.slot_id,
+        };
+
+        console.log("[useBookingListener] Dispatching booking-accepted event:", bookingData);
+
+        // Dispatch custom event for the notification context to handle
+        window.dispatchEvent(
+          new CustomEvent("booking-accepted", { detail: bookingData })
+        );
       } catch (error) {
-        console.error("Error fetching booking details:", error);
+        console.error("[useBookingListener] Error handling booking notification:", error);
       }
     }
 
     return () => {
-      slotsSubscription.unsubscribe();
-      claimsSubscription.unsubscribe();
+      console.log("[useBookingListener] Cleaning up subscription");
+      notificationSubscription.unsubscribe();
     };
-  }, [practiceId]);
+  }, [companyId]);
 }

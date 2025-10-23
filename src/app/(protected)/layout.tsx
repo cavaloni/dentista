@@ -7,7 +7,7 @@ import {
 } from "@/components/practice-context";
 import { NavLinks } from "@/components/nav-links";
 import { NotificationWrapper } from "@/components/notifications/notification-wrapper";
-import { ensurePracticeForUser } from "@/lib/practice";
+import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Database } from "@/lib/supabase/types";
 
@@ -32,30 +32,30 @@ export default async function ProtectedLayout({
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
-  const { data: practice, error } = await supabase
-    .from("practices")
+  const { data: company, error } = await supabase
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, recipients_per_wave, default_duration_minutes"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (error || !practice) {
-    throw error ?? new Error("Practice not found");
+  if (error || !company) {
+    throw error ?? new Error("Company not found");
   }
 
   // Type assertion to help TypeScript understand the type
-  const typedPractice = practice as Database["public"]["Tables"]["practices"]["Row"];
+  const typedCompany = company as Database["public"]["Tables"]["companies"]["Row"];
 
   const practiceContext: PracticeContextValue = {
-    id: typedPractice.id,
-    name: typedPractice.name,
-    timezone: typedPractice.timezone,
-    claimWindowMinutes: typedPractice.claim_window_minutes,
-    recipientsPerWave: typedPractice.recipients_per_wave,
-    defaultDurationMinutes: typedPractice.default_duration_minutes,
+    id: typedCompany.id,
+    name: typedCompany.name,
+    timezone: typedCompany.timezone,
+    claimWindowMinutes: typedCompany.claim_window_minutes,
+    recipientsPerWave: typedCompany.recipients_per_wave,
+    defaultDurationMinutes: typedCompany.default_duration_minutes,
   };
 
   return (
@@ -66,7 +66,7 @@ export default async function ProtectedLayout({
             <div className="space-y-6">
               <div>
                 <h1 className="text-lg font-semibold text-slate-100">
-                  {typedPractice.name}
+                  {typedCompany.name}
                 </h1>
                 <p className="text-xs uppercase tracking-wide text-cyan-300/80">
                   Gap Filler Console

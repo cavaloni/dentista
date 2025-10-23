@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensurePracticeForUser } from "@/lib/practice";
+import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function truncate(text: string, max = 80) {
@@ -18,14 +18,14 @@ export default async function LogsPage() {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
   const { data: messages } = await supabase
     .from("messages")
     .select(
       "id, created_at, direction, status, channel, attempt, error, body, external_message_id, waitlist_members(full_name), slot:slots(start_at), claim:claims(status, wave_number)"
     )
-    .eq("practice_id", practiceId)
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -34,14 +34,14 @@ export default async function LogsPage() {
     .select(
       "id, status, wave_number, notified_at, response_received_at, response_body, waitlist_members(full_name), slot:slots(start_at, status)"
     )
-    .eq("practice_id", practiceId)
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(20);
 
   const { data: webhooks } = await supabase
     .from("webhook_events")
     .select("id, provider, received_at, payload")
-    .eq("practice_id", practiceId)
+    .eq("company_id", companyId)
     .order("received_at", { ascending: false })
     .limit(20);
 

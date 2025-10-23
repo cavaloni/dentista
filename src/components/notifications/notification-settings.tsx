@@ -165,7 +165,7 @@ export function NotificationSettings() {
                   duration: "30",
                   practiceName: "Test Practice",
                   slotId: "test-slot",
-                };
+                } as const;
 
                 window.dispatchEvent(
                   new CustomEvent("booking-accepted", { detail: testBooking })

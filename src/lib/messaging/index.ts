@@ -46,7 +46,7 @@ async function upsertMessage(params: QueueMessageParams): Promise<UpsertResult> 
   const { data: existing } = await supabase
     .from("messages")
     .select("id, status, external_message_id")
-    .eq("practice_id", params.practiceId)
+    .eq("company_id", params.practiceId)
     .eq("metadata->>idempotency_key", params.idempotencyKey)
     .maybeSingle();
 
@@ -62,7 +62,7 @@ async function upsertMessage(params: QueueMessageParams): Promise<UpsertResult> 
   const { data: inserted, error } = await supabase
     .from("messages")
     .insert({
-      practice_id: params.practiceId,
+      company_id: params.practiceId,
       slot_id: params.slotId ?? null,
       claim_id: params.claimId ?? null,
       waitlist_member_id: params.waitlistMemberId ?? null,
@@ -80,6 +80,7 @@ async function upsertMessage(params: QueueMessageParams): Promise<UpsertResult> 
     .single();
 
   if (error || !inserted) {
+    console.error("[queueOutboundMessage] Failed to insert message:", error);
     throw error ?? new Error("Failed to queue message");
   }
 
@@ -226,7 +227,7 @@ export async function recordInboundMessage(params: {
   const supabase = createSupabaseServiceClient();
 
   const { error } = await supabase.from("messages").insert({
-    practice_id: params.practiceId,
+    company_id: params.practiceId,
     slot_id: params.slotId ?? null,
     claim_id: params.claimId ?? null,
     waitlist_member_id: params.waitlistMemberId ?? null,
@@ -239,6 +240,7 @@ export async function recordInboundMessage(params: {
   });
 
   if (error) {
+    console.error("[logInboundMessage] Failed to log inbound message:", error);
     throw error;
   }
 }
@@ -259,13 +261,16 @@ export async function retryFailedMessages(limit = 20) {
     .limit(limit);
 
   if (error || !failedMessages) {
+    console.error("[retryFailedMessages] Failed to fetch failed messages:", error);
     return [] as { id: string; success: boolean; error?: string }[];
   }
 
   const results: { id: string; success: boolean; error?: string }[] = [];
 
   for (const message of failedMessages) {
-    const address = message.waitlist_members?.address;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const member = message.waitlist_members as any;
+    const address = member?.address;
     if (!address) {
       continue;
     }

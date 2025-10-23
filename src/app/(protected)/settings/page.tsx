@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { PracticeSettingsForm } from "@/components/settings/practice-settings-form";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
-import { ensurePracticeForUser } from "@/lib/practice";
+import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -15,18 +15,18 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
-  const { data: practice } = await supabase
-    .from("practices")
+  const { data: company } = await supabase
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, recipients_per_wave, default_duration_minutes, invite_template, confirmation_template, taken_template"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (!practice) {
-    throw new Error("Practice settings not found");
+  if (!company) {
+    throw new Error("Company settings not found");
   }
 
   return (
@@ -40,7 +40,7 @@ export default async function SettingsPage() {
             Control how slots are offered and what patients receive.
           </p>
         </div>
-        <PracticeSettingsForm settings={practice} />
+        <PracticeSettingsForm settings={company} />
       </section>
 
       <NotificationSettings />

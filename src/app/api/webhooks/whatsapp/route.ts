@@ -103,11 +103,15 @@ export async function POST(request: Request) {
       }
     }
 
-    await service.from("webhook_events").insert({
+    const { error: webhookLogError } = await service.from("webhook_events").insert({
       provider: "meta",
       practice_id: practiceIds.values().next().value ?? null,
       payload,
     });
+
+    if (webhookLogError) {
+      console.error("[Meta Webhook] Failed to log webhook event:", webhookLogError);
+    }
 
     return NextResponse.json({ received: true });
   }
@@ -143,13 +147,17 @@ export async function POST(request: Request) {
 
     console.log("[Twilio Webhook] Message processed, practiceId:", practiceId);
 
-    await service.from("webhook_events").insert({
+    const { error: webhookLogError } = await service.from("webhook_events").insert({
       provider: "twilio",
       practice_id: practiceId ?? null,
       payload: Object.fromEntries(params.entries()),
     });
 
-    console.log("[Twilio Webhook] Webhook event logged successfully");
+    if (webhookLogError) {
+      console.error("[Twilio Webhook] Failed to log webhook event:", webhookLogError);
+    } else {
+      console.log("[Twilio Webhook] Webhook event logged successfully");
+    }
 
     return new NextResponse("", {
       status: 200,
@@ -161,7 +169,7 @@ export async function POST(request: Request) {
     console.error("[Twilio Webhook] Error processing message:", error);
     
     // Still log the webhook even if processing failed
-    await service.from("webhook_events").insert({
+    const { error: webhookLogError } = await service.from("webhook_events").insert({
       provider: "twilio",
       practice_id: null,
       payload: {
@@ -169,6 +177,10 @@ export async function POST(request: Request) {
         error: error instanceof Error ? error.message : String(error),
       },
     });
+
+    if (webhookLogError) {
+      console.error("[Twilio Webhook] Failed to log error webhook event:", webhookLogError);
+    }
 
     return new NextResponse("", {
       status: 200,

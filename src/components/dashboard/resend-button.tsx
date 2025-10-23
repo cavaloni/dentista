@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { resendNextWaveAction } from "@/app/(protected)/dashboard/actions";
 import {
@@ -23,7 +24,7 @@ function Submit() {
 }
 
 export function ResendButton({ slotId }: { slotId: string }) {
-  const [state, formAction] = useFormState<ReleaseSlotState, FormData>(
+  const [state, formAction] = useActionState<ReleaseSlotState, FormData>(
     resendNextWaveAction,
     releaseSlotInitialState
   );

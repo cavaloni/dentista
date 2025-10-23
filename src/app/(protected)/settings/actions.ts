@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { ensurePracticeForUser } from "@/lib/practice";
+import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -52,16 +52,17 @@ export async function updateSettingsAction(
     redirect("/login");
   }
 
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
   const service = createSupabaseServiceClient();
 
   const { error } = await service
-    .from("practices")
+    .from("companies")
     .update(parsed.data)
-    .eq("id", practiceId);
+    .eq("id", companyId);
 
   if (error) {
-    return { status: "error", message: "Failed to update settings." };
+    console.error("[updateSettingsAction] Database error:", error);
+    return { status: "error", message: `Failed to update settings: ${error.message}` };
   }
 
   revalidatePath("/settings");

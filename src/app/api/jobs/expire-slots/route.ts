@@ -21,14 +21,16 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseServiceClient();
 
+  // @ts-expect-error - RPC function types need regeneration
   const { data: expiredSlots, error } = await supabase.rpc("expire_open_slots");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (expiredSlots && expiredSlots.length > 0) {
-    const slotIds = expiredSlots.map((slot) => slot.id);
+  if (expiredSlots && Array.isArray(expiredSlots) && expiredSlots.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const slotIds = expiredSlots.map((slot: any) => slot.id);
     await supabase
       .from("claims")
       .update({ status: "expired" })

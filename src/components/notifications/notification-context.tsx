@@ -1,24 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, ReactNode, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
-export interface NotificationSettings {
-  enableBrowserNotifications: boolean;
-  enableSoundNotifications: boolean;
-  autoConfirmBookings: boolean;
-}
-
-export interface BookingNotification {
-  id: string;
-  patientName: string;
-  slotStart: string;
-  duration: string;
-  practiceName: string;
-  slotId: string;
-}
+import {
+  type BookingNotification,
+  selectSettings,
+  useNotificationStore,
+} from "@/stores/notifications";
 
 interface NotificationContextType {
-  settings: NotificationSettings;
+  settings: ReturnType<typeof selectSettings>;
   requestNotificationPermission: () => Promise<boolean>;
   playNotificationSound: () => void;
   showBookingModal: (booking: BookingNotification) => void;
@@ -29,20 +21,23 @@ interface NotificationContextType {
   confirmBooking: (bookingId: string) => void;
   rejectBooking: (bookingId: string) => void;
   dismissToast: () => void;
-  updateSettings: (newSettings: Partial<NotificationSettings>) => void;
+  updateSettings: (newSettings: Partial<ReturnType<typeof selectSettings>>) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<NotificationSettings>({
-    enableBrowserNotifications: true,
-    enableSoundNotifications: true,
-    autoConfirmBookings: false,
-  });
-  const [currentBooking, setCurrentBooking] = useState<BookingNotification | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isToastOpen, setIsToastOpen] = useState(false);
+  const router = useRouter();
+  const settings = useNotificationStore(selectSettings);
+  const currentBooking = useNotificationStore((state) => state.currentBooking);
+  const isModalOpen = useNotificationStore((state) => state.isModalOpen);
+  const isToastOpen = useNotificationStore((state) => state.isToastOpen);
+  const setSettings = useNotificationStore((state) => state.setSettings);
+  const showModal = useNotificationStore((state) => state.showModal);
+  const showToast = useNotificationStore((state) => state.showToast);
+  const closeModal = useNotificationStore((state) => state.closeModal);
+  const closeToast = useNotificationStore((state) => state.closeToast);
+  const handleBookingNotification = useNotificationStore((state) => state.handleBookingNotification);
 
   const requestNotificationPermission = async (): Promise<boolean> => {
     if (!("Notification" in window)) {
@@ -62,7 +57,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
-  const playNotificationSound = () => {
+  const playNotificationSound = useCallback(() => {
     if (!settings.enableSoundNotifications) return;
 
     try {
@@ -74,65 +69,128 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.warn("Failed to create audio element:", error);
     }
-  };
+  }, [settings.enableSoundNotifications]);
 
-  const showBrowserNotification = (booking: BookingNotification) => {
-    if (!settings.enableBrowserNotifications) return;
+  const showBookingModal = useCallback(
+    (booking: BookingNotification) => {
+      showModal(booking);
+    },
+    [showModal]
+  );
 
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      const notification = new Notification("Booking Accepted! 🎉", {
-        body: `${booking.patientName} has accepted the appointment at ${booking.slotStart}`,
-        icon: "/icons/notification-icon.png",
-        badge: "/icons/notification-badge.png",
-        tag: booking.id,
-        requireInteraction: true,
+  const showBookingToast = useCallback(
+    (booking: BookingNotification) => {
+      showToast(booking);
+    },
+    [showToast]
+  );
+
+  const showBrowserNotification = useCallback(
+    (booking: BookingNotification) => {
+      if (!settings.enableBrowserNotifications) return;
+
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notification = new Notification("Booking Accepted! 🎉", {
+          body: `${booking.patientName} has accepted the appointment at ${booking.slotStart}`,
+          icon: "/icons/notification-icon.png",
+          badge: "/icons/notification-badge.png",
+          tag: booking.id,
+          requireInteraction: true,
+        });
+
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+          showBookingModal(booking);
+        };
+
+        // Auto-close after 10 seconds
+        setTimeout(() => {
+          notification.close();
+        }, 10000);
+      }
+    },
+    [settings.enableBrowserNotifications, showBookingModal]
+  );
+
+  const confirmBooking = async (bookingId: string) => {
+    console.log("[NotificationContext] Confirming booking:", bookingId);
+
+    try {
+      const response = await fetch("/api/bookings/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claimId: bookingId }),
       });
 
-      notification.onclick = () => {
-        window.focus();
-        notification.close();
-        showBookingModal(booking);
-      };
+      if (!response.ok) {
+        const error = await response.json();
+        console.error("[NotificationContext] Failed to confirm booking:", error);
+        // TODO: Show error toast to user
+        return;
+      }
 
-      // Auto-close after 10 seconds
-      setTimeout(() => {
-        notification.close();
-      }, 10000);
+      const result = await response.json();
+      console.log("[NotificationContext] Booking confirmed successfully:", result);
+
+      // Close modal
+      closeModal();
+      
+      // Refresh dashboard to show updated slot status and recent activity
+      console.log("[NotificationContext] Refreshing dashboard...");
+      router.refresh();
+      
+      // TODO: Show success toast
+    } catch (error) {
+      console.error("[NotificationContext] Error confirming booking:", error);
+      // TODO: Show error toast to user
     }
   };
 
-  const showBookingModal = (booking: BookingNotification) => {
-    setCurrentBooking(booking);
-    setIsModalOpen(true);
+  const rejectBooking = async (bookingId: string) => {
+    console.log("[NotificationContext] Rejecting booking:", bookingId);
+
+    try {
+      const response = await fetch("/api/bookings/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claimId: bookingId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error("[NotificationContext] Failed to reject booking:", error);
+        // TODO: Show error toast to user
+        return;
+      }
+
+      const result = await response.json();
+      console.log("[NotificationContext] Booking rejected successfully:", result);
+
+      // Close modal
+      closeModal();
+      
+      // Refresh dashboard to show updated slot status and recent activity
+      console.log("[NotificationContext] Refreshing dashboard...");
+      router.refresh();
+      
+      // TODO: Show info toast about moving to next person
+    } catch (error) {
+      console.error("[NotificationContext] Error rejecting booking:", error);
+      // TODO: Show error toast to user
+    }
   };
 
-  const showBookingToast = (booking: BookingNotification) => {
-    setCurrentBooking(booking);
-    setIsToastOpen(true);
-  };
+  const dismissToast = useCallback(() => {
+    closeToast();
+  }, [closeToast]);
 
-  const confirmBooking = (bookingId: string) => {
-    // Here you would typically make an API call to confirm the booking
-    console.log("Booking confirmed:", bookingId);
-    setIsModalOpen(false);
-    setCurrentBooking(null);
-  };
-
-  const rejectBooking = (bookingId: string) => {
-    // Here you would typically make an API call to reject the booking
-    console.log("Booking rejected:", bookingId);
-    setIsModalOpen(false);
-    setCurrentBooking(null);
-  };
-
-  const dismissToast = () => {
-    setIsToastOpen(false);
-    setCurrentBooking(null);
-  };
-
-  const updateSettings = (newSettings: Partial<NotificationSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
-  };
+  const updateSettings = useCallback(
+    (newSettings: Partial<ReturnType<typeof selectSettings>>) => {
+      setSettings(newSettings);
+    },
+    [setSettings]
+  );
 
   // Request notification permission on mount
   useEffect(() => {
@@ -153,18 +211,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       showBrowserNotification(booking);
 
       // Show either modal or toast based on auto-confirm setting
-      if (settings.autoConfirmBookings) {
-        showBookingToast(booking);
-      } else {
-        showBookingModal(booking);
-      }
+      handleBookingNotification(booking);
     };
 
     window.addEventListener("booking-accepted", handleBookingAcceptedEvent as EventListener);
     return () => {
       window.removeEventListener("booking-accepted", handleBookingAcceptedEvent as EventListener);
     };
-  }, [settings, playNotificationSound, showBrowserNotification, showBookingToast, showBookingModal]);
+  }, [handleBookingNotification, playNotificationSound, showBrowserNotification]);
 
   const value: NotificationContextType = {
     settings,

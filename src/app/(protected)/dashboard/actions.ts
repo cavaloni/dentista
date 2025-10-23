@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { formatInTimeZone, zonedTimeToUtc } from "date-fns-tz";
 import { z } from "zod";
 
-import { ensurePracticeForUser } from "@/lib/practice";
+import { ensureCompanyForUser } from "@/lib/practice";
 import {
   buildInviteMessage,
   queueOutboundMessage,
@@ -22,6 +22,10 @@ const releaseSchema = z.object({
 });
 
 const resendSchema = z.object({
+  slot_id: z.string().uuid(),
+});
+
+const cancelSchema = z.object({
   slot_id: z.string().uuid(),
 });
 
@@ -52,46 +56,48 @@ export async function releaseSlotAction(
   }
 
   const service = createSupabaseServiceClient();
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
-  const { data: practice, error: practiceError } = await service
-    .from("practices")
+  const { data: company, error: companyError } = await service
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, recipients_per_wave, default_duration_minutes, invite_template"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (practiceError || !practice) {
+  if (companyError || !company) {
+    console.error("[releaseSlotAction] Failed to load company:", companyError);
     return {
       status: "error",
-      message: "Unable to load practice preferences.",
+      message: `Unable to load company preferences: ${companyError?.message ?? 'Company not found'}`,
     };
   }
 
   const startLocal = `${parsed.data.start_at}`;
-  const startUtc = zonedTimeToUtc(startLocal, practice.timezone);
+  const startUtc = zonedTimeToUtc(startLocal, company.timezone);
 
+  // @ts-expect-error - RPC function types need regeneration
   const { data: releaseResult, error } = await service.rpc("release_slot", {
-    _practice_id: practice.id,
+    _company_id: company.id,
     _start_at: startUtc.toISOString(),
     _duration_minutes: parsed.data.duration_minutes,
     _notes: parsed.data.notes ?? null,
-    _claim_window_minutes: practice.claim_window_minutes,
-    _wave_size: practice.recipients_per_wave,
+    _claim_window_minutes: company.claim_window_minutes,
+    _wave_size: company.recipients_per_wave,
     _released_by: user.id,
-    _timezone: practice.timezone,
+    _timezone: company.timezone,
   });
 
   if (error) {
-    console.error("release_slot", error);
+    console.error("[releaseSlotAction] release_slot RPC error:", error);
     return {
       status: "error",
-      message: "Could not release the slot. Try again shortly.",
+      message: `Could not release the slot: ${(error as { message?: string })?.message ?? 'Unknown error'}`,
     };
   }
 
-  const slotId = releaseResult?.[0]?.slot_id;
+  const slotId = (releaseResult as Array<{ slot_id?: string; claim_id?: string }>)?.[0]?.slot_id;
 
   if (!slotId) {
     return {
@@ -100,8 +106,8 @@ export async function releaseSlotAction(
     };
   }
 
-  const claimIds = releaseResult
-    ?.map((row) => row.claim_id)
+  const claimIds = (releaseResult as Array<{ slot_id?: string; claim_id?: string }>)
+    ?.map((row: { claim_id?: string }) => row.claim_id)
     .filter((value): value is string => Boolean(value)) ?? [];
 
   if (claimIds.length > 0) {
@@ -113,17 +119,18 @@ export async function releaseSlotAction(
       .in("id", claimIds);
 
     if (!claimError && claims) {
-      const invitePromises = claims.map(async (claim) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invitePromises = claims.map(async (claim: any) => {
         if (!claim.waitlist_members || !claim.slot) {
           return;
         }
 
-        const inviteBody = buildInviteMessage(practice.invite_template, {
-          practiceName: practice.name,
+        const inviteBody = buildInviteMessage(company.invite_template, {
+          practiceName: company.name,
           patientName: claim.waitlist_members.full_name,
           slotStart: formatInTimeZone(
             claim.slot.start_at,
-            practice.timezone,
+            company.timezone,
             "EEE d MMM • HH:mm"
           ),
           duration: `${claim.slot.duration_minutes}`,
@@ -131,7 +138,7 @@ export async function releaseSlotAction(
         });
 
         await queueOutboundMessage({
-          practiceId: practice.id,
+          practiceId: company.id,
           slotId,
           claimId: claim.id,
           waitlistMemberId: claim.waitlist_members.id,
@@ -195,20 +202,21 @@ export async function resendNextWaveAction(
   }
 
   const service = createSupabaseServiceClient();
-  const practiceId = await ensurePracticeForUser(user.id);
+  const companyId = await ensureCompanyForUser(user.id);
 
-  const { data: practice, error: practiceError } = await service
-    .from("practices")
+  const { data: company, error: companyError } = await service
+    .from("companies")
     .select(
       "id, name, timezone, claim_window_minutes, recipients_per_wave, invite_template"
     )
-    .eq("id", practiceId)
+    .eq("id", companyId)
     .single();
 
-  if (practiceError || !practice) {
+  if (companyError || !company) {
+    console.error("[resendNextWaveAction] Failed to load company:", companyError);
     return {
       status: "error",
-      message: "Unable to load practice preferences.",
+      message: `Unable to load company preferences: ${companyError?.message ?? 'Company not found'}`,
     };
   }
 
@@ -218,13 +226,14 @@ export async function resendNextWaveAction(
       "id, status, wave_number, claim_window_minutes, start_at, duration_minutes, expires_at"
     )
     .eq("id", parsed.data.slot_id)
-    .eq("practice_id", practice.id)
+    .eq("company_id", company.id)
     .single();
 
   if (slotError || !slot) {
+    console.error("[resendNextWaveAction] Failed to load slot:", slotError);
     return {
       status: "error",
-      message: "Slot no longer exists.",
+      message: `Slot no longer exists: ${slotError?.message ?? 'Not found'}`,
     };
   }
 
@@ -247,11 +256,11 @@ export async function resendNextWaveAction(
   let waitlistQuery = service
     .from("waitlist_members")
     .select("id, full_name, channel, address")
-    .eq("practice_id", practice.id)
+    .eq("company_id", company.id)
     .eq("active", true)
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true })
-    .limit(practice.recipients_per_wave);
+    .limit(company.recipients_per_wave);
 
   if (excludeIds.length > 0) {
     waitlistQuery = waitlistQuery.not(
@@ -264,9 +273,10 @@ export async function resendNextWaveAction(
   const { data: nextMembers, error: nextError } = await waitlistQuery;
 
   if (nextError) {
+    console.error("[resendNextWaveAction] Failed to fetch waitlist:", nextError);
     return {
       status: "error",
-      message: "Unable to fetch waitlist members.",
+      message: `Unable to fetch waitlist members: ${nextError.message}`,
     };
   }
 
@@ -284,7 +294,7 @@ export async function resendNextWaveAction(
     .from("claims")
     .insert(
       nextMembers.map((member) => ({
-        practice_id: practice.id,
+        company_id: company.id,
         slot_id: slot.id,
         waitlist_member_id: member.id,
         status: "pending" as const,
@@ -295,9 +305,10 @@ export async function resendNextWaveAction(
     .select("id, waitlist_member_id, wave_number");
 
   if (insertError || !newClaims) {
+    console.error("[resendNextWaveAction] Failed to insert claims:", insertError);
     return {
       status: "error",
-      message: "Could not create the next wave.",
+      message: `Could not create the next wave: ${insertError?.message ?? 'Insert failed'}`,
     };
   }
 
@@ -310,7 +321,7 @@ export async function resendNextWaveAction(
     );
 
   const newExpiry = new Date(
-    Date.now() + practice.claim_window_minutes * 60 * 1000
+    Date.now() + company.claim_window_minutes * 60 * 1000
   ).toISOString();
 
   await service
@@ -322,20 +333,20 @@ export async function resendNextWaveAction(
     const member = nextMembers.find((m) => m.id === claim.waitlist_member_id);
     if (!member) return;
 
-    const inviteBody = buildInviteMessage(practice.invite_template, {
-      practiceName: practice.name,
+    const inviteBody = buildInviteMessage(company.invite_template, {
+      practiceName: company.name,
       patientName: member.full_name,
       slotStart: formatInTimeZone(
         slot.start_at,
-        practice.timezone,
+        company.timezone,
         "EEE d MMM • HH:mm"
       ),
       duration: `${slot.duration_minutes}`,
-      claimWindow: `${practice.claim_window_minutes}`,
+      claimWindow: `${company.claim_window_minutes}`,
     });
 
     await queueOutboundMessage({
-      practiceId: practice.id,
+      practiceId: company.id,
       slotId: slot.id,
       claimId: claim.id,
       waitlistMemberId: member.id,
@@ -359,5 +370,77 @@ export async function resendNextWaveAction(
   return {
     status: "success",
     message: "Next cohort notified.",
+  };
+}
+
+export async function cancelSlotAction(
+  _prevState: ReleaseSlotState,
+  formData: FormData
+): Promise<ReleaseSlotState> {
+  const parsed = cancelSchema.safeParse({
+    slot_id: formData.get("slot_id"),
+  });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Invalid slot reference.",
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const service = createSupabaseServiceClient();
+  const companyId = await ensureCompanyForUser(user.id);
+
+  const { data: slot, error: slotError } = await service
+    .from("slots")
+    .select("id, status")
+    .eq("id", parsed.data.slot_id)
+    .eq("company_id", companyId)
+    .single();
+
+  if (slotError || !slot) {
+    console.error("[cancelSlotAction] Failed to load slot:", slotError);
+    return {
+      status: "error",
+      message: `Slot no longer exists: ${slotError?.message ?? 'Not found'}`,
+    };
+  }
+
+  if (slot.status !== "open") {
+    return {
+      status: "error",
+      message: "Only open broadcasts can be cancelled.",
+    };
+  }
+
+  // @ts-expect-error - RPC function types need regeneration
+  const { error: cancelError } = await service.rpc("cancel_slot", {
+    _company_id: companyId,
+    _slot_id: slot.id,
+  });
+
+  if (cancelError) {
+    console.error("[cancelSlotAction] cancel_slot RPC error:", cancelError);
+    return {
+      status: "error",
+      message: `Could not cancel the broadcast: ${cancelError.message}`,
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/logs");
+
+  return {
+    status: "success",
+    message: "Broadcast cancelled.",
   };
 }
