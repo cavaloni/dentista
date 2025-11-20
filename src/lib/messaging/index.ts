@@ -9,6 +9,11 @@ import {
   sendTwilioSms,
   sendTwilioWhatsApp,
 } from "./providers";
+import {
+  createMockProviderResponse,
+  generateMockExternalId,
+  scheduleMockResponse,
+} from "./demo";
 
 type Channel = Database["public"]["Enums"]["contact_channel"];
 
@@ -96,8 +101,25 @@ async function upsertMessage(params: QueueMessageParams): Promise<UpsertResult> 
 export async function deliverMessage(
   channel: Channel,
   to: string,
-  body: string
+  body: string,
+  companyId?: string
 ) {
+  // Check if demo mode is enabled for this company
+  if (companyId) {
+    const supabase = createSupabaseServiceClient();
+    const { data: company } = await supabase
+      .from("companies")
+      .select("demo_mode")
+      .eq("id", companyId)
+      .single();
+
+    if (company?.demo_mode) {
+      console.log("[Demo Mode] Bypassing Twilio, using mock delivery");
+      const mockExternalId = generateMockExternalId();
+      return createMockProviderResponse(mockExternalId);
+    }
+  }
+
   if (channel === "whatsapp") {
     if (env.WHATSAPP_PROVIDER === "meta") {
       return sendMetaWhatsApp(to, body);
@@ -130,7 +152,8 @@ export async function queueOutboundMessage(
     const providerResult = await deliverMessage(
       params.channel,
       params.to,
-      params.body
+      params.body,
+      params.practiceId
     );
 
     await supabase
@@ -147,6 +170,19 @@ export async function queueOutboundMessage(
         attempt: (result.attempt ?? 0) + 1,
       })
       .eq("id", result.messageId);
+
+    // If in demo mode and this is an invite message, schedule a mock response
+    const isDemo = (providerResult.response as Record<string, unknown>)?.demo_mode === true;
+    if (isDemo && params.templateKey === "slot_invite" && params.waitlistMemberId) {
+      console.log("[Demo Mode] Scheduling mock response for invite message");
+      
+      scheduleMockResponse({
+        companyId: params.practiceId,
+        from: params.to,
+        channel: params.channel,
+        externalId: providerResult.externalId,
+      }, 10000); // 10 second delay
+    }
 
     return { success: true, messageId: result.messageId };
   } catch (error) {
@@ -253,7 +289,7 @@ export async function retryFailedMessages(limit = 20) {
   const { data: failedMessages, error } = await supabase
     .from("messages")
     .select(
-      "id, practice_id, channel, body, attempt, metadata, waitlist_member_id, slot_id, claim_id, waitlist_members(address)"
+      "id, company_id, channel, body, attempt, metadata, waitlist_member_id, slot_id, claim_id, waitlist_members(address)"
     )
     .eq("status", "failed")
     .lt("attempt", 3)
@@ -279,7 +315,8 @@ export async function retryFailedMessages(limit = 20) {
       const providerResult = await deliverMessage(
         message.channel as Channel,
         address,
-        message.body
+        message.body,
+        message.company_id
       );
 
       await supabase

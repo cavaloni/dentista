@@ -4,11 +4,11 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useEffect, useRef } from "react";
 
+import { createMemberAction } from "@/app/(protected)/waitlist/actions";
 import {
-  createMemberAction,
   initialWaitlistState,
   type WaitlistActionState,
-} from "@/app/(protected)/waitlist/actions";
+} from "@/app/(protected)/waitlist/shared";
 import {
   useWaitlistStore,
 } from "@/stores/waitlist";
@@ -51,7 +51,8 @@ export function AddMemberForm() {
       markNeedsSync();
       formRef.current?.reset();
     }
-  }, [state, addMemberToStore, markNeedsSync]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">

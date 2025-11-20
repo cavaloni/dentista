@@ -27,7 +27,7 @@ export function BookingModal() {
           {/* Close button */}
           <button
             onClick={() => rejectBooking(currentBooking.id)}
-            className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+            className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -74,14 +74,14 @@ export function BookingModal() {
           <div className="flex gap-3">
             <button
               onClick={() => rejectBooking(currentBooking.id)}
-              className="flex-1 rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+              className="flex-1 rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
             >
               Go to Next Person
             </button>
 
             <button
               onClick={() => confirmBooking(currentBooking.id)}
-              className="flex-1 rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-colors"
+              className="flex-1 rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-colors cursor-pointer"
             >
               Confirm Booking
             </button>

@@ -2,9 +2,10 @@
 
 import { Command } from "cmdk";
 import { Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import Fuse from "fuse.js";
 
-import type { WaitlistMember } from "@/app/(protected)/waitlist/actions";
+import type { WaitlistMember } from "@/app/(protected)/waitlist/shared";
 
 type PatientSearchProps = {
   members: WaitlistMember[];
@@ -15,26 +16,45 @@ export function PatientSearch({ members, onSelectMember }: PatientSearchProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
+  // Configure Fuse.js for fuzzy search
+  const fuse = useMemo(() => {
+    return new Fuse(members, {
+      keys: [
+        { name: "full_name", weight: 0.7 },
+        { name: "address", weight: 0.2 },
+        { name: "channel", weight: 0.1 },
+      ],
+      threshold: 0.4, // 0 = exact match, 1 = match anything
+      includeScore: true,
+      minMatchCharLength: 2,
+      ignoreLocation: true,
+    });
+  }, [members]);
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((open) => !open);
+      } else if (e.key === "Escape" && open) {
+        e.preventDefault();
+        setOpen(false);
       }
     };
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [open]);
 
-  const filteredMembers = members.filter((member) => {
-    const searchLower = search.toLowerCase();
-    return (
-      member.full_name.toLowerCase().includes(searchLower) ||
-      member.address.toLowerCase().includes(searchLower) ||
-      member.channel.toLowerCase().includes(searchLower)
-    );
-  });
+  // Use fuzzy search if there's a query, otherwise show all
+  const filteredMembers = useMemo(() => {
+    if (!search.trim()) {
+      return members;
+    }
+    
+    const results = fuse.search(search);
+    return results.map(result => result.item);
+  }, [search, fuse, members]);
 
   const activeMembers = filteredMembers.filter((m) => m.active);
   const inactiveMembers = filteredMembers.filter((m) => !m.active);
@@ -43,7 +63,7 @@ export function PatientSearch({ members, onSelectMember }: PatientSearchProps) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-950/40 px-4 py-2.5 text-sm text-slate-400 transition hover:border-slate-700 hover:bg-slate-950/60"
+        className="flex w-full items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-950/40 px-4 py-2.5 text-sm text-slate-400 transition cursor-pointer hover:border-slate-700 hover:bg-slate-950/60"
       >
         <Search className="h-4 w-4" />
         <span>Search patients...</span>
@@ -71,7 +91,7 @@ export function PatientSearch({ members, onSelectMember }: PatientSearchProps) {
                   setOpen(false);
                   setSearch("");
                 }}
-                className="ml-2 rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                className="ml-2 rounded-md p-1 cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-200"
               >
                 <X className="h-4 w-4" />
               </button>

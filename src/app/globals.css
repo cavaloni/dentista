@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
+/* Light mode (default) */
+:root.light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+/* Dark mode */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+/* Default to light mode */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -12,18 +25,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Global button cursor */
+button:not(:disabled) {
+  cursor: pointer;
 }
 
 /* cmdk styles */

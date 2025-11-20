@@ -6,13 +6,16 @@ import { useFormStatus } from "react-dom";
 
 import {
   deleteMemberAction,
-  initialWaitlistState,
   toggleMemberAction,
   updateMemberAction,
-  type WaitlistActionState,
 } from "@/app/(protected)/waitlist/actions";
 import {
+  initialWaitlistState,
+  type WaitlistActionState,
+} from "@/app/(protected)/waitlist/shared";
+import {
   selectIsPending,
+  selectIsSelected,
   useWaitlistStore,
 } from "@/stores/waitlist";
 
@@ -39,7 +42,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md bg-cyan-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-950 shadow shadow-cyan-500/40 disabled:cursor-not-allowed disabled:opacity-60"
+      className="rounded-md bg-cyan-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-950 shadow shadow-cyan-500/40 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
     >
       {pending ? "Saving…" : "Save"}
     </button>
@@ -53,6 +56,7 @@ const selectRemoveMember = (state: ReturnType<typeof useWaitlistStore.getState>)
 const selectStartPending = (state: ReturnType<typeof useWaitlistStore.getState>) => state.startPending;
 const selectFinishPending = (state: ReturnType<typeof useWaitlistStore.getState>) => state.finishPending;
 const selectMarkNeedsSync = (state: ReturnType<typeof useWaitlistStore.getState>) => state.markNeedsSync;
+const selectToggleSelected = (state: ReturnType<typeof useWaitlistStore.getState>) => state.toggleSelected;
 
 export function MemberRow({ member }: { member: Member }) {
   const [editing, setEditing] = useState(false);
@@ -61,13 +65,22 @@ export function MemberRow({ member }: { member: Member }) {
     initialWaitlistState()
   );
   const selectIsPendingById = useMemo(() => selectIsPending(member.id), [member.id]);
+  const selectIsSelectedById = useMemo(() => selectIsSelected(member.id), [member.id]);
   const isPending = useWaitlistStore(selectIsPendingById);
+  const isSelected = useWaitlistStore(selectIsSelectedById);
   const updateMember = useWaitlistStore(selectUpdateMember);
   const toggleMemberInStore = useWaitlistStore(selectToggleMember);
   const removeMember = useWaitlistStore(selectRemoveMember);
   const startPending = useWaitlistStore(selectStartPending);
   const finishPending = useWaitlistStore(selectFinishPending);
   const markNeedsSync = useWaitlistStore(selectMarkNeedsSync);
+  const toggleSelectedFn = useWaitlistStore(selectToggleSelected);
+
+  const handleToggleSelected = () => {
+    toggleSelectedFn(member.id);
+  };
+
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleToggle = async () => {
     if (isPending) return;
@@ -83,7 +96,7 @@ export function MemberRow({ member }: { member: Member }) {
     markNeedsSync();
   };
 
-  const handleDelete = async () => {
+  const handleConfirmDelete = async () => {
     if (isPending) return;
     startPending(member.id);
     const formData = new FormData();
@@ -94,6 +107,11 @@ export function MemberRow({ member }: { member: Member }) {
       markNeedsSync();
     }
     finishPending(member.id);
+    setShowConfirm(false);
+  };
+
+  const handleDeleteClick = () => {
+    setShowConfirm(true);
   };
 
   useEffect(() => {
@@ -102,12 +120,20 @@ export function MemberRow({ member }: { member: Member }) {
       markNeedsSync();
       setEditing(false);
     }
-  }, [state.status, updateMember, markNeedsSync]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 shadow shadow-slate-950/30">
+    <div className={`rounded-xl border border-slate-800/60 bg-slate-950/40 p-4 shadow shadow-slate-950/30 transition-all ${isSelected ? "ring-2 ring-cyan-400/50" : ""}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2 text-sm">
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={handleToggleSelected}
+            className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500/40 focus:ring-offset-0 cursor-pointer"
+          />
+          <div className="flex-1 space-y-2 text-sm">
           {editing ? (
             <form action={formAction} className="space-y-3">
               <input type="hidden" name="id" value={member.id} />
@@ -169,7 +195,7 @@ export function MemberRow({ member }: { member: Member }) {
                 <SaveButton />
                 <button
                   type="button"
-                  className="text-xs uppercase tracking-wide text-slate-400 hover:text-slate-200"
+                  className="text-xs uppercase tracking-wide text-slate-400 hover:text-slate-200 cursor-pointer"
                   onClick={() => setEditing(false)}
                 >
                   Cancel
@@ -212,13 +238,14 @@ export function MemberRow({ member }: { member: Member }) {
               )}
             </div>
           )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 text-xs uppercase tracking-wide text-slate-400 md:items-end">
           {!editing && (
             <button
               type="button"
-              className="rounded-md border border-slate-700/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-cyan-400 hover:text-cyan-200"
+              className="rounded-md border border-slate-700/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-cyan-400 hover:text-cyan-200 cursor-pointer"
               onClick={() => setEditing(true)}
             >
               Edit member
@@ -229,7 +256,7 @@ export function MemberRow({ member }: { member: Member }) {
             onClick={handleToggle}
             disabled={isPending}
             aria-busy={isPending}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-amber-400 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-amber-400 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {isPending ? (
               <span className="flex items-center gap-2 text-amber-200">
@@ -242,14 +269,26 @@ export function MemberRow({ member }: { member: Member }) {
           </button>
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={handleDeleteClick}
             disabled={isPending}
-            className="rounded-md border border-rose-600/50 px-3 py-1 text-xs font-semibold text-rose-300 transition hover:border-rose-400 hover:text-rose-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-md border border-rose-600/50 px-3 py-1 text-xs font-semibold text-rose-300 transition hover:border-rose-400 hover:text-rose-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {isPending ? "..." : "Remove"}
           </button>
         </div>
       </div>
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-slate-900 p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-100">Confirm Deletion</h3>
+            <p className="mt-2 text-sm text-slate-400">Are you sure you want to remove {member.full_name}? This action cannot be undone.</p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setShowConfirm(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 cursor-pointer">Cancel</button>
+              <button onClick={handleConfirmDelete} className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 cursor-pointer">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

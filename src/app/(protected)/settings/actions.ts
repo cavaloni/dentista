@@ -16,14 +16,13 @@ const settingsSchema = z.object({
   invite_template: z.string().min(10).max(500),
   confirmation_template: z.string().min(10).max(500),
   taken_template: z.string().min(10).max(500),
+  demo_mode: z.coerce.boolean().optional(),
 });
 
 export type SettingsState =
   | { status: "idle" }
   | { status: "success"; message: string }
   | { status: "error"; message: string };
-
-export const settingsInitialState: SettingsState = { status: "idle" };
 
 export async function updateSettingsAction(
   _prev: SettingsState,
@@ -37,6 +36,7 @@ export async function updateSettingsAction(
     invite_template: formData.get("invite_template"),
     confirmation_template: formData.get("confirmation_template"),
     taken_template: formData.get("taken_template"),
+    demo_mode: formData.get("demo_mode") === "on",
   });
 
   if (!parsed.success) {

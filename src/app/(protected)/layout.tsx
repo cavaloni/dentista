@@ -12,8 +12,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Database } from "@/lib/supabase/types";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/waitlist", label: "Waitlist" },
+  { href: "/broadcasts", label: "Broadcasts" },
+  { href: "/waitlist", label: "Patient List" },
   { href: "/settings", label: "Settings" },
   { href: "/logs", label: "Activity" },
 ];
@@ -62,13 +62,13 @@ export default async function ProtectedLayout({
     <PracticeProvider value={practiceContext}>
       <NotificationWrapper>
         <div className="flex min-h-screen flex-col md:flex-row">
-          <aside className="w-full border-b border-slate-800/70 bg-slate-950/70 px-6 py-6 backdrop-blur md:w-72 md:border-r md:border-b-0">
+          <aside className="w-full border-b border-slate-200 bg-white/70 px-6 py-6 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/70 md:w-72 md:border-r md:border-b-0">
             <div className="space-y-6">
               <div>
-                <h1 className="text-lg font-semibold text-slate-100">
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                   {typedCompany.name}
                 </h1>
-                <p className="text-xs uppercase tracking-wide text-cyan-300/80">
+                <p className="text-xs uppercase tracking-wide text-cyan-600 dark:text-cyan-300/80">
                   Gap Filler Console
                 </p>
               </div>

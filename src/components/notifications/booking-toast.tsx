@@ -36,7 +36,7 @@ export function BookingToast() {
           {/* Dismiss button */}
           <button
             onClick={dismissToast}
-            className="rounded-lg p-1 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 transition-colors"
+            className="rounded-lg p-1 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>

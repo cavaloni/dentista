@@ -68,7 +68,7 @@ export function NotificationSettings() {
             <button
               onClick={() => handleBrowserNotificationToggle(!settings.enableBrowserNotifications)}
               disabled={notificationDenied}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-950 cursor-pointer ${
                 settings.enableBrowserNotifications
                   ? "bg-cyan-500"
                   : "bg-slate-700"
@@ -99,7 +99,7 @@ export function NotificationSettings() {
             </div>
             <button
               onClick={() => updateSettings({ enableSoundNotifications: !settings.enableSoundNotifications })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-950 cursor-pointer ${
                 settings.enableSoundNotifications
                   ? "bg-emerald-500"
                   : "bg-slate-700"
@@ -130,7 +130,7 @@ export function NotificationSettings() {
             </div>
             <button
               onClick={() => updateSettings({ autoConfirmBookings: !settings.autoConfirmBookings })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-950 cursor-pointer ${
                 settings.autoConfirmBookings
                   ? "bg-purple-500"
                   : "bg-slate-700"
@@ -171,7 +171,7 @@ export function NotificationSettings() {
                   new CustomEvent("booking-accepted", { detail: testBooking })
                 );
               }}
-              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors"
+              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
             >
               Test Now
             </button>

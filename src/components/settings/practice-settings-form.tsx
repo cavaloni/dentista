@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
 import {
-  settingsInitialState,
   updateSettingsAction,
   type SettingsState,
 } from "@/app/(protected)/settings/actions";
@@ -17,6 +16,7 @@ type PracticeSettings = {
   invite_template: string;
   confirmation_template: string;
   taken_template: string;
+  demo_mode: boolean | null;
 };
 
 function SubmitButton() {
@@ -39,7 +39,7 @@ export function PracticeSettingsForm({
 }) {
   const [state, formAction] = useActionState<SettingsState, FormData>(
     updateSettingsAction,
-    settingsInitialState
+    { status: "idle" }
   );
 
   return (
@@ -121,6 +121,23 @@ export function PracticeSettingsForm({
           className="w-full rounded-lg border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 shadow-inner shadow-slate-950/40 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/30"
         />
       </label>
+
+      <div className="rounded-xl border border-amber-800/60 bg-amber-950/30 p-4">
+        <label className="flex items-center justify-between cursor-pointer">
+          <div className="flex-1">
+            <span className="text-sm font-medium text-slate-200">Demo Mode</span>
+            <p className="text-xs text-slate-400 mt-1">
+              Bypass Twilio and simulate message delivery with automatic responses (~10s delay)
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            name="demo_mode"
+            defaultChecked={settings.demo_mode ?? false}
+            className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-slate-950 cursor-pointer"
+          />
+        </label>
+      </div>
 
       <div className="flex items-center justify-between text-xs text-slate-400">
         <SubmitButton />
