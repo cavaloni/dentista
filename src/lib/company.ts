@@ -43,3 +43,33 @@ export async function getPracticeId(): Promise<string> {
 export function hasCompanyContext(): boolean {
   return !!env.COMPANY_SLUG;
 }
+
+export interface CompanyBranding {
+  logo_url?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  company_name?: string;
+  website_url?: string;
+}
+
+/**
+ * Get company branding from environment variable or user context
+ */
+export async function getCompanyBranding(): Promise<CompanyBranding | null> {
+  if (env.COMPANY_SLUG) {
+    const supabase = createSupabaseServiceClient();
+    // @ts-expect-error - RPC function types need regeneration
+    const { data, error } = await supabase.rpc("get_company_branding_by_slug", {
+      _slug: env.COMPANY_SLUG,
+    });
+
+    if (error) {
+      console.error("Error fetching company branding:", error);
+      return null;
+    }
+
+    return data as CompanyBranding;
+  }
+
+  return null;
+}
