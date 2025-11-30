@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PracticeSettingsForm } from "@/components/settings/practice-settings-form";
 import { ThemeToggle } from "@/components/settings/theme-toggle";
 import { NotificationSettings } from "@/components/notifications/notification-settings";
+import { SecurityDashboard } from "@/components/settings/security-dashboard";
 import { ensureCompanyForUser } from "@/lib/practice";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -57,6 +58,18 @@ export default async function SettingsPage() {
       </section>
 
       <NotificationSettings />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40 dark:border-slate-800/60 dark:bg-slate-950/70 dark:shadow-slate-950/40">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Security & Compliance
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Monitor security events and access audit logs designed for HIPAA, GDPR, and Dutch NEN 7510/7513 alignment.
+          </p>
+        </div>
+        <SecurityDashboard />
+      </section>
     </div>
   );
 }

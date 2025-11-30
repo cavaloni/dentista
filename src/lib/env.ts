@@ -20,6 +20,9 @@ const serverSchema = z.object({
   CLAIM_EXPIRY_MINUTES: z.string().optional(),
   LOG_LEVEL: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  // Security settings
+  ENCRYPTION_MASTER_KEY: z.string().min(32).optional(),
+  SESSION_TIMEOUT_MINUTES: z.string().optional(),
 });
 
 const clientSchema = z.object({
@@ -48,6 +51,8 @@ const rawEnv = {
   CLAIM_EXPIRY_MINUTES: process.env.CLAIM_EXPIRY_MINUTES,
   LOG_LEVEL: process.env.LOG_LEVEL,
   CRON_SECRET: process.env.CRON_SECRET,
+  ENCRYPTION_MASTER_KEY: process.env.ENCRYPTION_MASTER_KEY,
+  SESSION_TIMEOUT_MINUTES: process.env.SESSION_TIMEOUT_MINUTES,
 };
 
 const clientParsed = clientSchema.parse(rawEnv);

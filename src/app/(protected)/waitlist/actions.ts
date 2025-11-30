@@ -8,6 +8,7 @@ import { ensurePracticeForUser } from "@/lib/practice";
 import { normalizeAddress } from "@/lib/messaging/providers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { logPatientAccess } from "@/lib/security";
 import { type WaitlistActionState, type WaitlistMember } from "./shared";
 
 const memberSchema = z.object({
@@ -32,7 +33,7 @@ async function getContext() {
   const companyId = await ensurePracticeForUser(user.id);
   const service = createSupabaseServiceClient();
 
-  return { supabase, service, companyId } as const;
+  return { supabase, service, companyId, userId: user.id } as const;
 }
 
 export async function createMemberAction(
@@ -51,7 +52,7 @@ export async function createMemberAction(
     return { status: "error", message: "Please check the form fields." };
   }
 
-  const { service, companyId } = await getContext();
+  const { service, companyId, userId } = await getContext();
 
   const normalizedAddress = normalizeAddress(
     parsed.data.channel,
@@ -81,6 +82,11 @@ export async function createMemberAction(
     };
   }
 
+  // Log audit event for patient creation
+  await logPatientAccess('create', userId, companyId, data.id, {
+    channel: parsed.data.channel,
+  });
+
   revalidatePath("/waitlist");
   return {
     status: "success",
@@ -106,7 +112,7 @@ export async function updateMemberAction(
     return { status: "error", message: "Invalid member payload." };
   }
 
-  const { service, companyId } = await getContext();
+  const { service, companyId, userId } = await getContext();
 
   const normalizedAddress = normalizeAddress(
     parsed.data.channel,
@@ -136,6 +142,9 @@ export async function updateMemberAction(
       message: `Update failed: ${error?.message ?? "Unknown error"}`,
     };
   }
+
+  // Log audit event for patient update
+  await logPatientAccess('update', userId, companyId, parsed.data.id);
 
   revalidatePath("/waitlist");
   return {
@@ -174,7 +183,7 @@ export async function toggleMemberAction(formData: FormData) {
 }
 
 export async function deleteMemberAction(formData: FormData) {
-  const { service, companyId } = await getContext();
+  const { service, companyId, userId } = await getContext();
   const id = formData.get("id");
 
   if (!id || typeof id !== "string") {
@@ -191,6 +200,9 @@ export async function deleteMemberAction(formData: FormData) {
     console.error("[deleteMemberAction] Database error:", error);
     return { success: false };
   }
+
+  // Log audit event for patient deletion
+  await logPatientAccess('delete', userId, companyId, id);
 
   revalidatePath("/waitlist");
   return { success: true, id };
@@ -221,7 +233,7 @@ export async function bulkImportMembersAction(
   }>
 ): Promise<{ success: boolean; imported: number; errors: number; message: string }> {
   try {
-    const { service, companyId } = await getContext();
+    const { service, companyId, userId } = await getContext();
 
     // Validate all members
     const validMembers = [];
@@ -273,6 +285,12 @@ export async function bulkImportMembersAction(
       };
     }
 
+    // Log audit event for bulk import
+    await logPatientAccess('import', userId, companyId, undefined, {
+      imported_count: data?.length || 0,
+      error_count: errorCount,
+    });
+
     revalidatePath("/waitlist");
     
     return {
@@ -293,7 +311,7 @@ export async function bulkImportMembersAction(
 }
 
 export async function bulkDeleteMembersAction(memberIds: string[]) {
-  const { service, companyId } = await getContext();
+  const { service, companyId, userId } = await getContext();
 
   const { error } = await service
     .from("waitlist_members")
@@ -305,6 +323,12 @@ export async function bulkDeleteMembersAction(memberIds: string[]) {
     console.error("[bulkDeleteMembersAction] Database error:", error);
     return { success: false, message: "Failed to delete members" };
   }
+
+  // Log audit event for bulk deletion
+  await logPatientAccess('delete', userId, companyId, undefined, {
+    deleted_count: memberIds.length,
+    patient_ids: memberIds,
+  });
 
   revalidatePath("/waitlist");
   return { success: true, deleted: memberIds.length };

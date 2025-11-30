@@ -7,9 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:reset": "rimraf ./prisma/dev.db ./prisma/dev.db-journal && prisma migrate reset --force"
   },
   "dependencies": {
+    "@prisma/client": "^5.19.1",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.47.10",
@@ -26,6 +31,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "prisma": "^5.19.1",
     "@playwright/test": "^1.48.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.4.6",
