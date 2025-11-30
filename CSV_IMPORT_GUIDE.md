@@ -1,31 +1,14 @@
-# CSV Import Feature Guide
+# File Import Feature Guide
 
 ## Overview
 
-The CSV import feature allows you to bulk upload contacts to your waitlist. It includes:
+The file import feature allows you to bulk upload contacts to your waitlist. It includes:
+- **CSV and Excel support** (.csv, .xlsx, .xls)
 - **Smart column mapping** with fuzzy matching
-- **AI-assisted mapping** for ambiguous cases (using OpenRouter)
 - **Enhanced fuzzy search** powered by Fuse.js
+- **Full client-side processing** - no data leaves your browser until import
 
-## Setup
-
-### 1. Add OpenRouter API Key
-
-Add the following to your `.env` file:
-
-```bash
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-```
-
-Get your API key from: https://openrouter.ai/keys
-
-### 2. Cost Estimation
-
-- **Without AI**: $0 (pure client-side fuzzy matching)
-- **With AI**: ~$0.001-0.01 per CSV upload (only when "Fix with AI" is clicked)
-- AI model used: `openai/gpt-4o-mini` (fast and cost-effective)
-
-## CSV Format
+## File Formats
 
 ### Required Fields
 - **Name/Full Name**: Patient's full name
@@ -51,13 +34,13 @@ See `sample-contacts.csv` for a complete example.
 
 ### 1. Smart Column Mapping
 
-The system automatically maps CSV columns using fuzzy matching:
+The system automatically maps columns using fuzzy matching with support for both English and Dutch:
 
-- **Name variations**: "Name", "Full Name", "Patient Name", "Patient", etc.
-- **Contact variations**: "Phone", "Mobile", "Email", "WhatsApp", "Number", etc.
-- **Channel variations**: "Channel", "Method", "Type", etc.
-- **Priority variations**: "Priority", "Urgency", "Importance", etc.
-- **Notes variations**: "Notes", "Comments", "Remarks", "Description", etc.
+- **Name variations**: "Name", "Full Name", "Patient Name", "Naam", "Patiënt", etc.
+- **Contact variations**: "Phone", "Mobile", "Email", "Telefoon", "Mobiel", etc.
+- **Channel variations**: "Channel", "Method", "Kanaal", "Methode", etc.
+- **Priority variations**: "Priority", "Urgency", "Prioriteit", "Urgentie", etc.
+- **Notes variations**: "Notes", "Comments", "Opmerkingen", "Notities", etc.
 
 ### 2. Confidence Scoring
 
@@ -66,24 +49,15 @@ Each mapping receives a confidence score:
 - **60-79%**: Medium confidence (yellow) - review recommended
 - **0-59%**: Low confidence (red) - manual review needed
 
-### 3. AI-Assisted Mapping
+### 3. Import Process
 
-If the automatic mapping is uncertain:
-1. Click the **"Fix with AI"** button
-2. The system sends only headers + 2-3 sample rows to OpenRouter
-3. AI analyzes the data and suggests optimal mappings
-4. Review and adjust as needed
-
-### 4. Import Process
-
-1. Click **"Import CSV"** button on the waitlist page
-2. Drag & drop or select your CSV file
+1. Click **"Import"** button on the waitlist page
+2. Drag & drop or select your CSV/Excel file
 3. Review the column mappings
-4. Adjust any incorrect mappings manually
-5. (Optional) Click "Fix with AI" for better suggestions
-6. Click **"Import X contacts"** to complete
-7. Contacts are imported in **inactive state** by default
-8. Activate individual contacts as needed from the waitlist
+4. Adjust any incorrect mappings manually using the dropdown
+5. Click **"Import X contacts"** to complete
+6. Contacts are imported in **inactive state** by default
+7. Activate individual contacts as needed from the waitlist
 
 ## Enhanced Search
 
@@ -128,31 +102,28 @@ The system recognizes many variations of column names:
 
 ## Troubleshooting
 
-### CSV Not Parsing
-- Ensure file is valid CSV format
-- Check for proper comma separation
+### File Not Parsing
+- **CSV**: Ensure file is valid CSV format with comma separation
+- **Excel**: Ensure data is in the first sheet
 - Verify file is not empty
+- Check that the first row contains column headers
 
 ### Incorrect Mappings
-- Manually adjust mappings in the preview
-- Use "Fix with AI" for better suggestions
+- Manually adjust mappings using the dropdown menu
 - Ensure column headers are descriptive
+- Use standard column names like "Name", "Phone", "Email"
 
 ### Import Fails
 - Check that required fields (name, address) are mapped
 - Verify data format (phone numbers, emails)
 - Check browser console for detailed errors
 
-### AI Mapping Not Working
-- Verify `OPENROUTER_API_KEY` is set in `.env`
-- Check OpenRouter account has credits
-- Review browser console for API errors
-
 ## Technical Details
 
 ### Libraries Used
 - **papaparse**: CSV parsing
-- **fuse.js**: Fuzzy search (2KB)
+- **xlsx**: Excel file parsing (.xlsx, .xls)
+- **fuse.js**: Fuzzy search
 - **react-dropzone**: File upload UI
 - **fastest-levenshtein**: String similarity matching
 
@@ -170,8 +141,7 @@ The system recognizes many variations of column names:
 
 ## Privacy & Security
 
-- CSV files are processed client-side
-- Only headers + 3 sample rows sent to AI (when requested)
-- No data stored on OpenRouter servers
+- **All files are processed entirely client-side** - no data sent to external servers
+- Files never leave your browser until you click Import
 - All imports require authentication
-- Data scoped to your company/practice
+- Data is scoped to your practice

@@ -1,12 +1,13 @@
 import { distance } from "fastest-levenshtein";
 
 export type RequiredField = "full_name" | "address" | "channel" | "priority" | "notes";
+export type ExtendedField = RequiredField | "first_name" | "last_name";
 
 export type ColumnMapping = {
   csvColumn: string;
-  mappedTo: RequiredField | null;
+  mappedTo: ExtendedField | null;
   confidence: number; // 0-100
-  suggestions: Array<{ field: RequiredField; score: number }>;
+  suggestions: Array<{ field: ExtendedField; score: number }>;
 };
 
 export type MappingResult = {
@@ -16,16 +17,28 @@ export type MappingResult = {
 };
 
 // Known variations for each field
-const FIELD_VARIATIONS: Record<RequiredField, string[]> = {
+const FIELD_VARIATIONS: Record<ExtendedField, string[]> = {
   full_name: [
     // English variations
     "name", "full name", "fullname", "patient name", "patientname",
     "patient", "client name", "clientname", "person", "contact name",
-    "first name", "last name", "customer name", "customer",
+    "customer name", "customer",
     // Dutch variations
     "naam", "volledige naam", "patient naam", "patientnaam",
     "patiënt", "cliënt naam", "cliëntnaam", "persoon", "contact naam",
-    "voornaam", "achternaam", "klant naam", "klant", "deelnemer"
+    "klant naam", "klant", "deelnemer"
+  ],
+  first_name: [
+    // English variations
+    "first name", "firstname", "first", "given name", "forename",
+    // Dutch variations
+    "voornaam", "eerste naam"
+  ],
+  last_name: [
+    // English variations
+    "last name", "lastname", "last", "surname", "family name", "familyname",
+    // Dutch variations
+    "achternaam", "familienaam"
   ],
   address: [
     // English variations
@@ -105,18 +118,18 @@ function calculateSimilarity(str1: string, str2: string): number {
  */
 function findBestMatch(
   csvColumn: string,
-  excludeFields: Set<RequiredField> = new Set()
-): { field: RequiredField; score: number } | null {
-  let bestMatch: { field: RequiredField; score: number } | null = null;
+  excludeFields: Set<ExtendedField> = new Set()
+): { field: ExtendedField; score: number } | null {
+  let bestMatch: { field: ExtendedField; score: number } | null = null;
   
   for (const [field, variations] of Object.entries(FIELD_VARIATIONS)) {
-    if (excludeFields.has(field as RequiredField)) continue;
+    if (excludeFields.has(field as ExtendedField)) continue;
     
     for (const variation of variations) {
       const score = calculateSimilarity(csvColumn, variation);
       
       if (!bestMatch || score > bestMatch.score) {
-        bestMatch = { field: field as RequiredField, score };
+        bestMatch = { field: field as ExtendedField, score };
       }
     }
   }
@@ -129,13 +142,13 @@ function findBestMatch(
  */
 function getSuggestions(
   csvColumn: string,
-  excludeFields: Set<RequiredField> = new Set(),
+  excludeFields: Set<ExtendedField> = new Set(),
   topN: number = 3
-): Array<{ field: RequiredField; score: number }> {
-  const scores: Array<{ field: RequiredField; score: number }> = [];
+): Array<{ field: ExtendedField; score: number }> {
+  const scores: Array<{ field: ExtendedField; score: number }> = [];
   
   for (const [field, variations] of Object.entries(FIELD_VARIATIONS)) {
-    if (excludeFields.has(field as RequiredField)) continue;
+    if (excludeFields.has(field as ExtendedField)) continue;
     
     let maxScore = 0;
     for (const variation of variations) {
@@ -143,7 +156,7 @@ function getSuggestions(
       maxScore = Math.max(maxScore, score);
     }
     
-    scores.push({ field: field as RequiredField, score: maxScore });
+    scores.push({ field: field as ExtendedField, score: maxScore });
   }
   
   return scores
@@ -156,7 +169,7 @@ function getSuggestions(
  */
 export function autoMapColumns(csvHeaders: string[]): MappingResult {
   const mappings: ColumnMapping[] = [];
-  const usedFields = new Set<RequiredField>();
+  const usedFields = new Set<ExtendedField>();
   
   // First pass: find high-confidence matches
   for (const header of csvHeaders) {
@@ -185,8 +198,13 @@ export function autoMapColumns(csvHeaders: string[]): MappingResult {
   const avgConfidence = mappings.reduce((sum, m) => sum + m.confidence, 0) / mappings.length;
   const overallConfidence = Math.round((mappedCount / csvHeaders.length) * avgConfidence);
   
+  // Check if we have full_name OR (first_name AND/OR last_name)
+  const hasFullName = usedFields.has("full_name");
+  const hasFirstOrLast = usedFields.has("first_name") || usedFields.has("last_name");
+  const hasNameField = hasFullName || hasFirstOrLast;
+  
   // Determine if manual review is needed
-  const needsReview = overallConfidence < 80 || !usedFields.has("full_name") || !usedFields.has("address");
+  const needsReview = overallConfidence < 80 || !hasNameField || !usedFields.has("address");
   
   return {
     mappings,
@@ -200,14 +218,25 @@ export function autoMapColumns(csvHeaders: string[]): MappingResult {
  */
 export function validateMappings(mappings: ColumnMapping[]): {
   valid: boolean;
-  missingFields: RequiredField[];
+  missingFields: string[];
 } {
-  const requiredFields: RequiredField[] = ["full_name", "address"];
   const mappedFields = new Set(
     mappings.filter(m => m.mappedTo !== null).map(m => m.mappedTo!)
   );
   
-  const missingFields = requiredFields.filter(f => !mappedFields.has(f));
+  const missingFields: string[] = [];
+  
+  // Check for name: full_name OR (first_name and/or last_name)
+  const hasFullName = mappedFields.has("full_name");
+  const hasFirstOrLast = mappedFields.has("first_name") || mappedFields.has("last_name");
+  if (!hasFullName && !hasFirstOrLast) {
+    missingFields.push("full_name (or first/last name)");
+  }
+  
+  // Check for address
+  if (!mappedFields.has("address")) {
+    missingFields.push("address");
+  }
   
   return {
     valid: missingFields.length === 0,

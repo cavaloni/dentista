@@ -3,12 +3,14 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import Papa from "papaparse";
-import { Upload, X, AlertCircle, CheckCircle, Loader2, Sparkles } from "lucide-react";
+import * as XLSX from "xlsx";
+import { Upload, X, AlertCircle, CheckCircle, Loader2, FileSpreadsheet } from "lucide-react";
 import {
   autoMapColumns,
   validateMappings,
   type ColumnMapping,
   type RequiredField,
+  type ExtendedField,
 } from "@/lib/csv/column-mapper";
 
 type ParsedCSV = {
@@ -30,12 +32,57 @@ export type ImportData = {
   notes: string;
 };
 
-const FIELD_LABELS: Record<RequiredField, string> = {
+const FIELD_LABELS: Record<ExtendedField, string> = {
   full_name: "Full Name",
+  first_name: "First Name",
+  last_name: "Last Name",
   address: "Phone/Email",
   channel: "Channel",
   priority: "Priority",
   notes: "Notes",
+};
+
+const MIN_HEADER_CELLS = 2;
+const LETTER_REGEX = /[a-zA-Z\u00C0-\u017F]/;
+
+const sanitizeRows = (rows: unknown[][]): string[][] => {
+  return rows.map((row) =>
+    row.map((cell) => (cell === null || cell === undefined ? "" : String(cell).trim()))
+  );
+};
+
+const trimTrailingEmptyCells = (row: string[]): string[] => {
+  const trimmed = [...row];
+  while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") {
+    trimmed.pop();
+  }
+  return trimmed;
+};
+
+const alignRowToHeaders = (row: string[], headerLength: number): string[] => {
+  return Array.from({ length: headerLength }, (_, index) => row[index] ?? "");
+};
+
+const detectHeaderAndRows = (
+  rows: string[][]
+): { headers: string[]; rows: string[][] } | null => {
+  for (let i = 0; i < rows.length; i++) {
+    const candidate = trimTrailingEmptyCells(rows[i]);
+    const nonEmptyCells = candidate.filter((cell) => cell !== "");
+
+    if (nonEmptyCells.length < MIN_HEADER_CELLS) continue;
+    if (!nonEmptyCells.some((cell) => LETTER_REGEX.test(cell))) continue;
+
+    const headerLength = candidate.length;
+    const alignedRows = rows.slice(i + 1).map((row) => alignRowToHeaders(row, headerLength));
+
+    return {
+      headers: candidate,
+      rows: alignedRows,
+    };
+  }
+
+  return null;
 };
 
 export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProps) {
@@ -43,53 +90,106 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
   const [parsedData, setParsedData] = useState<ParsedCSV | null>(null);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: number } | null>(null);
+  const [fileType, setFileType] = useState<"csv" | "excel" | null>(null);
+
+  const processFileData = (headers: string[], rows: string[][]) => {
+    // Filter out empty rows
+    const validRows = rows.filter(row => 
+      row.some(cell => cell && cell.trim() !== "")
+    );
+
+    if (headers.length === 0 || validRows.length === 0) {
+      setError("File is empty or invalid");
+      return;
+    }
+
+    setParsedData({ headers, rows: validRows });
+    
+    // Auto-map columns
+    const result = autoMapColumns(headers);
+    setMappings(result.mappings);
+    setStep("mapping");
+  };
+
+  const parseExcelFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1 });
+        
+        if (jsonData.length === 0) {
+          setError("Excel file is empty");
+          return;
+        }
+
+        // Sanitize all rows first
+        const allRows = sanitizeRows(jsonData as unknown[][]);
+        
+        // Detect header row (skip title/date rows)
+        const detected = detectHeaderAndRows(allRows);
+        if (!detected) {
+          setError("Could not detect column headers. Please ensure the file has a header row.");
+          return;
+        }
+
+        processFileData(detected.headers, detected.rows);
+      } catch (err) {
+        setError("Failed to parse Excel file. Please check the format.");
+        console.error(err);
+      }
+    };
+    reader.onerror = () => {
+      setError("Failed to read file");
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
     setError(null);
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
 
-    Papa.parse(file, {
-      complete: (results) => {
-        const headers = results.data[0] as string[];
-        const rows = results.data.slice(1) as string[][];
-        
-        // Filter out empty rows
-        const validRows = rows.filter(row => 
-          row.some(cell => cell && cell.trim() !== "")
-        );
-
-        if (headers.length === 0 || validRows.length === 0) {
-          setError("CSV file is empty or invalid");
-          return;
-        }
-
-        setParsedData({ headers, rows: validRows });
-        
-        // Auto-map columns
-        const result = autoMapColumns(headers);
-        setMappings(result.mappings);
-        setStep("mapping");
-      },
-      error: (error) => {
-        setError(`Failed to parse CSV: ${error.message}`);
-      },
-    });
+    if (isExcel) {
+      setFileType("excel");
+      parseExcelFile(file);
+    } else {
+      setFileType("csv");
+      Papa.parse(file, {
+        complete: (results) => {
+          const allRows = sanitizeRows(results.data as unknown[][]);
+          const detected = detectHeaderAndRows(allRows);
+          if (!detected) {
+            setError("Could not detect column headers.");
+            return;
+          }
+          processFileData(detected.headers, detected.rows);
+        },
+        error: (error) => {
+          setError(`Failed to parse CSV: ${error.message}`);
+        },
+      });
+    }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       "text/csv": [".csv"],
-      "application/vnd.ms-excel": [".csv"],
+      "application/vnd.ms-excel": [".csv", ".xls"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
     maxFiles: 1,
   });
 
-  const handleMappingChange = (csvColumn: string, newMapping: RequiredField | null) => {
+  const handleMappingChange = (csvColumn: string, newMapping: ExtendedField | null) => {
     setMappings(prev =>
       prev.map(m =>
         m.csvColumn === csvColumn
@@ -97,46 +197,6 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
           : m
       )
     );
-  };
-
-  const handleAIFix = async () => {
-    if (!parsedData) return;
-    
-    setAiLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/csv/map-columns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          headers: parsedData.headers,
-          sampleRows: parsedData.rows.slice(0, 3), // Send first 3 rows
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to get AI suggestions");
-      }
-
-      const { mappings: aiMappings, reasoning } = await response.json();
-      
-      // Update mappings with AI suggestions
-      setMappings(prev =>
-        prev.map(m => ({
-          ...m,
-          mappedTo: aiMappings[m.csvColumn] || m.mappedTo,
-          confidence: aiMappings[m.csvColumn] ? 95 : m.confidence,
-        }))
-      );
-
-      console.log("AI reasoning:", reasoning);
-    } catch (err) {
-      setError("Failed to get AI suggestions. Please map manually.");
-      console.error(err);
-    } finally {
-      setAiLoading(false);
-    }
   };
 
   const handleImport = async () => {
@@ -153,7 +213,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
 
     try {
       // Build mapping index
-      const mappingIndex = new Map<string, RequiredField>();
+      const mappingIndex = new Map<string, ExtendedField>();
       mappings.forEach(m => {
         if (m.mappedTo) {
           mappingIndex.set(m.csvColumn, m.mappedTo);
@@ -163,7 +223,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
       // Transform rows to import data
       const importData: ImportData[] = parsedData.rows
         .map((row) => {
-          const data: Partial<ImportData> = {
+          const data: Partial<ImportData> & { first_name?: string; last_name?: string } = {
             priority: 10, // Default priority
             notes: "",
             channel: "whatsapp", // Default channel
@@ -177,6 +237,10 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
             
             if (field === "full_name") {
               data.full_name = value;
+            } else if (field === "first_name") {
+              data.first_name = value;
+            } else if (field === "last_name") {
+              data.last_name = value;
             } else if (field === "address") {
               data.address = value;
             } else if (field === "channel") {
@@ -193,6 +257,11 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
               data.notes = value;
             }
           });
+
+          // Merge first_name + last_name into full_name if not already set
+          if (!data.full_name && (data.first_name || data.last_name)) {
+            data.full_name = [data.first_name, data.last_name].filter(Boolean).join(" ").trim();
+          }
 
           return data as ImportData;
         })
@@ -224,6 +293,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
     setMappings([]);
     setError(null);
     setImportResult(null);
+    setFileType(null);
     onClose();
   };
 
@@ -235,8 +305,8 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-100">
-            {step === "upload" && "Import Contacts from CSV"}
-            {step === "mapping" && "Map CSV Columns"}
+            {step === "upload" && "Import Contacts"}
+            {step === "mapping" && "Map Columns"}
             {step === "importing" && "Importing..."}
             {step === "success" && "Import Complete!"}
           </h2>
@@ -265,11 +335,11 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
                 <Upload className="mx-auto h-12 w-12 text-slate-400" />
                 <p className="mt-4 text-sm text-slate-300">
                   {isDragActive
-                    ? "Drop your CSV file here"
-                    : "Drag & drop a CSV file, or click to browse"}
+                    ? "Drop your file here"
+                    : "Drag & drop a CSV or Excel file, or click to browse"}
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  CSV should contain columns for name, phone/email, and optionally channel, priority, notes
+                  Supports .csv, .xlsx, and .xls files with columns for name, phone/email, and optionally channel, priority, notes
                 </p>
               </div>
 
@@ -286,20 +356,12 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-sm text-slate-400">
-                  Found {parsedData.rows.length} rows. Map CSV columns to fields:
+                  Found {parsedData.rows.length} rows{fileType === "excel" ? " from Excel" : ""}. Map columns to fields:
                 </p>
-                <button
-                  onClick={handleAIFix}
-                  disabled={aiLoading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-purple-500/10 px-3 py-1.5 text-sm font-medium text-purple-300 transition hover:bg-purple-500/20 disabled:opacity-50 cursor-pointer"
-                >
-                  {aiLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                  Fix with AI
-                </button>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {fileType === "excel" ? "Excel" : "CSV"}
+                </div>
               </div>
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -331,7 +393,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
                         onChange={(e) =>
                           handleMappingChange(
                             mapping.csvColumn,
-                            e.target.value === "" ? null : (e.target.value as RequiredField)
+                            e.target.value === "" ? null : (e.target.value as ExtendedField)
                           )
                         }
                         className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30"
