@@ -235,6 +235,15 @@ export async function bulkImportMembersAction(
   try {
     const { service, companyId, userId } = await getContext();
 
+    // Fetch company's country code for phone number normalization
+    const { data: company } = await service
+      .from("companies")
+      .select("country_code")
+      .eq("id", companyId)
+      .single();
+
+    const countryCode = company?.country_code;
+
     // Validate all members
     const validMembers = [];
     let errorCount = 0;
@@ -244,7 +253,8 @@ export async function bulkImportMembersAction(
       if (parsed.success) {
         const normalizedAddress = normalizeAddress(
           parsed.data.channel,
-          parsed.data.address
+          parsed.data.address,
+          countryCode // Pass country code for automatic prepending
         );
         validMembers.push({
           company_id: companyId,
@@ -292,7 +302,7 @@ export async function bulkImportMembersAction(
     });
 
     revalidatePath("/waitlist");
-    
+
     return {
       success: true,
       imported: data?.length || 0,

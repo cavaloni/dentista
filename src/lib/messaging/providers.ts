@@ -19,7 +19,8 @@ function normalizeE164(value: string) {
 
 export function normalizeAddress(
   channel: "whatsapp" | "sms" | "email",
-  address: string
+  address: string,
+  countryCode?: string
 ) {
   if (channel === "email") {
     return address.trim().toLowerCase();
@@ -29,11 +30,34 @@ export function normalizeAddress(
     if (address.startsWith("whatsapp:")) {
       return address;
     }
-    const e164 = normalizeE164(address.replace("whatsapp:", "").trim());
+    let phoneNumber = address.replace("whatsapp:", "").trim();
+
+    // If number doesn't have international prefix and country code is provided, prepend it
+    if (countryCode && !phoneNumber.startsWith("+") && !phoneNumber.startsWith("00")) {
+      // Remove leading zero if present (common in many countries)
+      if (phoneNumber.startsWith("0")) {
+        phoneNumber = phoneNumber.slice(1);
+      }
+      phoneNumber = countryCode + phoneNumber;
+    }
+
+    const e164 = normalizeE164(phoneNumber);
     return `whatsapp:${e164}`;
   }
 
-  return normalizeE164(address.trim());
+  // SMS channel
+  let phoneNumber = address.trim();
+
+  // If number doesn't have international prefix and country code is provided, prepend it
+  if (countryCode && !phoneNumber.startsWith("+") && !phoneNumber.startsWith("00")) {
+    // Remove leading zero if present (common in many countries)
+    if (phoneNumber.startsWith("0")) {
+      phoneNumber = phoneNumber.slice(1);
+    }
+    phoneNumber = countryCode + phoneNumber;
+  }
+
+  return normalizeE164(phoneNumber);
 }
 
 async function sendTwilioMessage(params: Record<string, string>): Promise<ProviderResult> {

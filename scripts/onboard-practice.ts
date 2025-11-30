@@ -48,6 +48,42 @@ async function onboardPractice() {
         const logoUrl = await rl.question('Logo URL (optional): ');
         const websiteUrl = await rl.question('Website URL (optional): ');
 
+        console.log('\n🌍 Country Configuration');
+        console.log('Select country (for phone number formatting):');
+        console.log('1. Netherlands (+31)');
+        console.log('2. Belgium (+32)');
+        console.log('3. Germany (+49)');
+        console.log('4. United States (+1)');
+        console.log('5. United Kingdom (+44)');
+        console.log('6. Other (enter country code manually)');
+        const countryChoice = await rl.question('Choice [1]: ') || '1';
+
+        let countryCode: string;
+        switch (countryChoice) {
+            case '1':
+                countryCode = '+31';
+                break;
+            case '2':
+                countryCode = '+32';
+                break;
+            case '3':
+                countryCode = '+49';
+                break;
+            case '4':
+                countryCode = '+1';
+                break;
+            case '5':
+                countryCode = '+44';
+                break;
+            case '6':
+                const customCode = await rl.question('Enter country code (e.g., +33 for France): ');
+                countryCode = customCode.startsWith('+') ? customCode : `+${customCode}`;
+                break;
+            default:
+                countryCode = '+31'; // Default to Netherlands
+        }
+
+
         console.log('\n🔒 Access Control');
         const allowedEmailsInput = await rl.question('Allowed Emails (comma separated): ');
         const allowedEmails = allowedEmailsInput
@@ -72,6 +108,7 @@ async function onboardPractice() {
                 slug,
                 branding,
                 allowed_emails: allowedEmails,
+                country_code: countryCode,
                 // Default values
                 timezone: 'Europe/Amsterdam',
                 claim_window_minutes: 10,
