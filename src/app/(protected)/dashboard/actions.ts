@@ -77,12 +77,11 @@ export async function releaseSlotAction(
   const startLocal = `${parsed.data.start_at}`;
   const startUtc = zonedTimeToUtc(startLocal, company.timezone);
 
-  // @ts-expect-error - RPC function types need regeneration
   const { data: releaseResult, error } = await service.rpc("release_slot", {
     _company_id: company.id,
     _start_at: startUtc.toISOString(),
     _duration_minutes: parsed.data.duration_minutes,
-    _notes: parsed.data.notes ?? null,
+    _notes: parsed.data.notes ?? '',
     _claim_window_minutes: company.claim_window_minutes,
     _wave_size: company.recipients_per_wave,
     _released_by: user.id,
@@ -422,7 +421,6 @@ export async function cancelSlotAction(
     };
   }
 
-  // @ts-expect-error - RPC function types need regeneration
   const { error: cancelError } = await service.rpc("cancel_slot", {
     _company_id: companyId,
     _slot_id: slot.id,
