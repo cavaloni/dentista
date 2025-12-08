@@ -177,7 +177,8 @@ export async function getAllBroadcastsAction(): Promise<Broadcast[]> {
       // Extract winner information for booked broadcasts
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const winnerClaims = (slot as any).winner_claims;
-      const winningClaim = winnerClaims?.find((claim: any) => 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const winningClaim = winnerClaims?.find((claim: any) =>
         claim.status === 'won' && claim.waitlist_members
       );
       const winner = winningClaim?.waitlist_members;
@@ -260,7 +261,7 @@ export async function getBroadcastDetailAction(
     assignments.map(async (assignment) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const member = (assignment as any).waitlist_members;
-      
+
       const { data: claim } = await supabase
         .from("claims")
         .select("status, wave_number, notified_at")
@@ -500,7 +501,7 @@ export async function startBroadcastAction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const assignment = assignments.find((a) => a.waitlist_member_id === claim.waitlist_member_id) as any;
     const member = assignment?.waitlist_members;
-    
+
     if (!member) return;
 
     const inviteBody = buildInviteMessage(company.invite_template, {
@@ -603,9 +604,9 @@ export async function cancelBroadcastAction(
   }
 
   if (!["open", "claimed"].includes(slot.status)) {
-    return { 
-      success: false, 
-      message: "Only active broadcasts can be cancelled" 
+    return {
+      success: false,
+      message: "Only active broadcasts can be cancelled"
     };
   }
 
@@ -636,9 +637,9 @@ export async function cancelBroadcastAction(
   revalidatePath("/broadcasts");
   revalidatePath("/dashboard");
 
-  return { 
-    success: true, 
-    message: "Broadcast cancelled. All pending claims have been cancelled." 
+  return {
+    success: true,
+    message: "Broadcast cancelled. All pending claims have been cancelled."
   };
 }
 

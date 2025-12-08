@@ -9,22 +9,32 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
+import 'node-fetch';
 
 // Load environment variables from .env.local
 const envContent = readFileSync('.env.local', 'utf8');
-const envVars = Object.fromEntries(
-    envContent.split('\n')
-        .filter(line => line.trim() && !line.startsWith('#'))
-        .map(line => line.split('='))
-);
+const envVars: Record<string, string> = {};
+envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) return;
+    const key = trimmed.substring(0, eqIndex);
+    const value = trimmed.substring(eqIndex + 1);
+    envVars[key] = value;
+});
 
 const supabaseUrl = envVars.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = envVars.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !serviceKey) {
     console.error('Missing Supabase credentials in .env.local');
+    console.error('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? 'Found' : 'MISSING');
+    console.error('SUPABASE_SERVICE_ROLE_KEY:', serviceKey ? 'Found' : 'MISSING');
     process.exit(1);
 }
+
+console.log('Supabase URL:', supabaseUrl.substring(0, 30) + '...');
 
 const supabase = createClient(supabaseUrl, serviceKey);
 
