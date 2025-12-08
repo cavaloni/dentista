@@ -242,7 +242,8 @@ export async function bulkImportMembersAction(
       .eq("id", companyId)
       .single();
 
-    const countryCode = company?.country_code;
+    // Cast to include country_code since types may not be regenerated
+    const countryCode = (company as { country_code?: string } | null)?.country_code;
 
     // Validate all members
     const validMembers = [];

@@ -21,7 +21,6 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseServiceClient();
 
-  // @ts-expect-error - RPC function types need regeneration
   const { data: expiredSlots, error } = await supabase.rpc("expire_open_slots");
 
   if (error) {
