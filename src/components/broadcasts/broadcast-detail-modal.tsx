@@ -23,7 +23,7 @@ type BroadcastDetailModalProps = {
 
 export function BroadcastDetailModal({
   broadcastId,
-  timezone,
+  timezone: _timezone,
   onClose,
 }: BroadcastDetailModalProps) {
   const [broadcast, setBroadcast] = useState<BroadcastDetail | null>(null);

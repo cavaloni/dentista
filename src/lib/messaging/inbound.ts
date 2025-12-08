@@ -1,7 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
-  buildConfirmationMessage,
   buildTakenMessage,
   queueOutboundMessage,
   recordInboundMessage,

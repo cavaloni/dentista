@@ -9,7 +9,6 @@ import {
   autoMapColumns,
   validateMappings,
   type ColumnMapping,
-  type RequiredField,
   type ExtendedField,
 } from "@/lib/csv/column-mapper";
 
@@ -177,6 +176,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
         },
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -267,7 +267,7 @@ export function CSVUploadModal({ isOpen, onClose, onImport }: CSVUploadModalProp
         })
         .filter(d => d.full_name && d.address); // Filter out invalid rows
 
-      const result = await onImport(importData);
+      await onImport(importData);
       
       // Show success screen with results
       setImportResult({

@@ -157,7 +157,7 @@ export function WaitlistClient({ members }: WaitlistClientProps) {
     }
   };
 
-  const handleSelectAllActive = () => {
+  const _handleSelectAllActive = () => {
     // Select all active members on current page
     selectAllFn(true);
   };

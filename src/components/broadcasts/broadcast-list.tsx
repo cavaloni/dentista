@@ -1,6 +1,5 @@
 "use client";
 
-import { formatInTimeZone } from "date-fns-tz";
 import { useState } from "react";
 
 import type { Broadcast } from "@/app/(protected)/waitlist/shared";

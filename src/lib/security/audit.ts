@@ -57,7 +57,6 @@ export interface AuditLogEntry {
 }
 
 // Helper to get untyped client for audit_logs table (until types are regenerated)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getAuditTable() {
   const service = createSupabaseServiceClient();
   // Use 'as any' to bypass type checking until types are regenerated

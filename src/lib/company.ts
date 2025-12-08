@@ -1,5 +1,3 @@
-import { cache } from "react";
-
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { env } from "@/lib/env";
 
@@ -11,7 +9,6 @@ export async function getCompanyId(): Promise<string> {
   // If COMPANY_SLUG env var is set, use it for service operations
   if (env.COMPANY_SLUG) {
     const supabase = createSupabaseServiceClient();
-    // @ts-expect-error - RPC function types need regeneration
     const { data, error } = await supabase.rpc("get_company_by_slug", {
       _slug: env.COMPANY_SLUG,
     });
