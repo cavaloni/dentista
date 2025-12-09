@@ -1,5 +1,6 @@
 'use server';
 
+import { headers } from "next/headers";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
@@ -39,10 +40,17 @@ export async function requestMagicLink(
     }
 
     const supabase = await createSupabaseServerClient();
+    
+    // Get the origin from request headers to support dynamic Vercel deployment URLs
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const protocol = headersList.get("x-forwarded-proto") ?? "https";
+    const origin = host ? `${protocol}://${host}` : env.BASE_URL;
+    
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: {
-        emailRedirectTo: env.MAGIC_LINK_REDIRECT_URL ?? `${env.BASE_URL}/auth/callback`,
+        emailRedirectTo: env.MAGIC_LINK_REDIRECT_URL ?? `${origin}/auth/callback`,
         shouldCreateUser: true,
       },
     });
