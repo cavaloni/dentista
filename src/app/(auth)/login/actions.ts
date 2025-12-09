@@ -46,16 +46,19 @@ export async function requestMagicLink(
     const host = headersList.get("host");
     const protocol = headersList.get("x-forwarded-proto") ?? "https";
     const origin = host ? `${protocol}://${host}` : env.BASE_URL;
+    const redirectUrl = env.MAGIC_LINK_REDIRECT_URL ?? `${origin}/auth/callback`;
+    
+    console.log('Magic link debug:', { host, protocol, origin, redirectUrl, envBaseUrl: env.BASE_URL });
     
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: {
-        emailRedirectTo: env.MAGIC_LINK_REDIRECT_URL ?? `${origin}/auth/callback`,
+        emailRedirectTo: redirectUrl,
         shouldCreateUser: true,
       },
     });
 
-    console.log('Magic link request result:', { error });
+    console.log('Magic link request result:', { error, redirectUrl });
 
     if (error) {
       return {
